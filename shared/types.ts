@@ -5,6 +5,7 @@ export interface MealEvent {
   title: string;
   date: string;
   location: string;
+  address: string;
   description: string;
   shareToken: string;
   archived: boolean;

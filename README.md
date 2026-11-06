@@ -3,10 +3,12 @@
 Une application pour organiser un repas entre amis et savoir qui apporte quoi, pensée d'abord pour le téléphone. Chaque changement apparaît en direct sur les autres appareils.
 
 - L'admin crée les repas, fixe leur date et gère les éléments à apporter.
+- L’heure se choisit en format 24 h, par quarts d’heure : `00`, `15`, `30` ou `45`. Une adresse facultative permet d’ouvrir le lieu dans Maps.
 - Chaque élément a un objectif facultatif, saisi directement : 2 400 g de fromage, 3 L de boissons, 12 places de raclette ou 1 cocotte.
 - Les invités ouvrent le lien du repas et indiquent un prénom pour participer. Ils peuvent ajouter un élément libre et modifier les apports de tout le monde.
 - Seul l'admin peut renommer ou supprimer un élément, changer son unité ou son objectif, et modifier le titre ou la date du repas.
 - Les barres s'arrêtent à 100 %, mais leur texte affiche le total réel, par exemple **110 %**. Les éléments sans objectif affichent simplement leur total et leurs contributeurs.
+- Les quantités et objectifs sont entiers, sauf pour les litres qui acceptent les décimales et la virgule. Les boutons **− / +** changent la valeur de **1**, quelle que soit l’unité.
 
 ## Stack
 

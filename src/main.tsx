@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
+  ArrowLeft,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -36,6 +37,8 @@ import type {
   Unit,
 } from "../shared/types";
 import "./style.css";
+import AdminHome from "./AdminHome";
+import QuantityInput, { parseQuantity } from "./QuantityInput";
 
 const number = (n: number) =>
   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(n);
@@ -82,9 +85,11 @@ const timeOf = (date: string) => {
   const d = new Date(date);
   return Number.isNaN(d.getTime())
     ? ""
-    : d
-        .toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
-        .replace(":", "h");
+    : d.toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      });
 };
 const initials = (name: string) =>
   name
@@ -144,7 +149,6 @@ type ModalState =
       personId?: string;
     }
   | { kind: "activity" }
-  | { kind: "navigation" }
   | { kind: "share" }
   | { kind: "options" }
   | { kind: "info" }
@@ -166,10 +170,26 @@ function Avatar({ name, small = false }: { name: string; small?: boolean }) {
     </span>
   );
 }
+function AddressLink({ address }: { address: string }) {
+  if (!address.trim()) return null;
+  return (
+    <a
+      className="event-address"
+      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Ouvrir l’adresse dans Maps : ${address}`}
+    >
+      <MapPin size={14} />
+      <span>{address}</span>
+    </a>
+  );
+}
 function App() {
   const initialToken =
     window.location.pathname.match(/^\/e\/([^/]+)/)?.[1] || "";
   const [token, setToken] = useState(initialToken);
+  const [path, setPath] = useState(window.location.pathname);
   const tokenRef = useRef(token);
   tokenRef.current = token;
   const [session, setSession] = useState<Session | null>(null);
@@ -192,11 +212,10 @@ function App() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
   const toastTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
-  const isAdminPage = window.location.pathname === "/admin";
+  const isAdminPage = path === "/admin";
   const notify = useCallback((message: string, error = false) => {
     clearTimeout(toastTimeout.current);
     setToast({ message, error });
@@ -245,6 +264,17 @@ function App() {
     setTab("items");
     setPageError("");
     window.history.pushState({}, "", `/e/${newToken}`);
+    setPath(`/e/${newToken}`);
+  }, []);
+  const goAdmin = useCallback(() => {
+    tokenRef.current = "";
+    setToken("");
+    setSnapshot(null);
+    setLoading(false);
+    setPageError("");
+    setModal(null);
+    window.history.pushState({}, "", "/admin");
+    setPath("/admin");
   }, []);
   useEffect(() => {
     api<Session>("/session")
@@ -252,14 +282,8 @@ function App() {
       .catch(() => setSession({ admin: false, actor: null }));
   }, []);
   useEffect(() => {
-    if (session?.admin)
-      refreshEvents()
-        .then((list) => {
-          if (!tokenRef.current && list.length)
-            selectEvent((list.find((e) => !e.archived) || list[0]).shareToken);
-        })
-        .catch((e) => notify(e.message, true));
-  }, [session?.admin, refreshEvents, selectEvent, notify]);
+    if (session?.admin) refreshEvents().catch((e) => notify(e.message, true));
+  }, [session?.admin, token, refreshEvents, notify]);
   useEffect(() => {
     if (!token) return;
     let current = true;
@@ -280,6 +304,7 @@ function App() {
     const onPop = () => {
       const next = window.location.pathname.match(/^\/e\/([^/]+)/)?.[1] || "";
       tokenRef.current = next;
+      setPath(window.location.pathname);
       setToken(next);
       setSnapshot(null);
     };
@@ -372,6 +397,7 @@ function App() {
       const error = e as ApiError;
       if (error.status === 409) {
         await refresh().catch(() => {});
+        if (session?.admin) await refreshEvents().catch(() => {});
         setModal(null);
         notify(`${error.message} Les données ont été actualisées.`, true);
       } else notify(error.message, true);
@@ -406,7 +432,6 @@ function App() {
   const participantName = (id: string) =>
     snapshot?.participants.find((p) => p.id === id)?.name || "Participant";
   const event = snapshot?.event;
-  const visibleEvents = events.filter((e) => showArchived || !e.archived);
   const targeted = snapshot?.items.filter((i) => i.target !== null) || [];
   const filteredItems =
     snapshot?.items.filter(
@@ -437,109 +462,28 @@ function App() {
       setModal({ kind: "share" });
     }
   };
-  const identityButton = (
-    <button
-      className="identity-button"
-      onClick={() => setModal({ kind: "identity" })}
-      aria-label="Modifier mon prénom"
-    >
-      <span>{session?.actor || (session?.admin ? "Admin" : "Mon prénom")}</span>
-      <ChevronDown size={15} />
-    </button>
-  );
 
   return (
     <>
       <div className={`app-shell ${session?.admin ? "" : "guest-layout"}`}>
-        {session?.admin && (
-          <aside className="sidebar">
-            <a className="brand" href="/admin" aria-label="dumbfood accueil">
-              dumbfood
-            </a>
-            <div className="sidebar-section-label">Repas</div>
-            <nav className="event-nav" aria-label="Mes repas">
-              {visibleEvents.map((e) => (
-                <button
-                  key={e.id}
-                  className={`event-nav-button ${token === e.shareToken ? "selected" : ""}`}
-                  onClick={() => selectEvent(e.shareToken)}
-                >
-                  <span>
-                    {e.title}
-                    <small>
-                      {formatDate(e.date, { day: "numeric", month: "short" })}
-                      {e.archived ? " · Archivé" : ""}
-                    </small>
-                  </span>
-                </button>
-              ))}
-            </nav>
-            <button
-              className="sidebar-add"
-              onClick={() => setModal({ kind: "event" })}
-            >
-              <Plus size={17} /> Nouveau repas
-            </button>
-            {events.some((e) => e.archived) && (
-              <button
-                className="text-button archived-toggle"
-                onClick={() => setShowArchived(!showArchived)}
-              >
-                {showArchived ? "Masquer les archives" : "Voir les archives"}
-              </button>
-            )}
-            <div className="sidebar-bottom">
-              <button className="sidebar-utility" onClick={signOut}>
-                <LogOut size={17} /> Déconnexion
-              </button>
-            </div>
-          </aside>
-        )}
         <div className="main-column">
           {!token && (
             <header className="topbar">
-              <div className="mobile-brand-group">
-                {session?.admin && (
-                  <button
-                    className="mobile-admin-menu icon-button"
-                    aria-label="Choisir un repas"
-                    onClick={() => setModal({ kind: "navigation" })}
-                  >
-                    <Menu size={20} />
-                  </button>
-                )}
-                <a
-                  href={session?.admin ? "/admin" : "/"}
-                  className="mobile-brand"
-                >
-                  dumbfood
-                </a>
-              </div>
+              <a href="/admin" className="mobile-brand">
+                dumbfood
+              </a>
               {session?.admin && (
-                <span className="topbar-label">Mes repas</span>
-              )}
-              <div className="topbar-actions">
-                {token && (
-                  <span
-                    className={`connection ${connection}`}
-                    role="status"
-                    aria-label={
-                      connection === "live"
-                        ? "Synchronisé en direct"
-                        : "Reconnexion en cours"
-                    }
-                  >
-                    <span />
-                    {connection === "live" ? "En direct" : "Reconnexion…"}
+                <div className="admin-account">
+                  <span>
+                    {session.actor && session.actor !== "Admin"
+                      ? session.actor
+                      : "Administration"}
                   </span>
-                )}
-                {identityButton}
-                {!session?.admin && !token && (
-                  <a href="/admin" className="text-button">
-                    Administration
-                  </a>
-                )}
-              </div>
+                  <button className="text-button" onClick={signOut}>
+                    Déconnexion
+                  </button>
+                </div>
+              )}
             </header>
           )}
           <main>
@@ -574,24 +518,22 @@ function App() {
                 </form>
               </div>
             ) : !token ? (
-              <div className="welcome-wrap">
-                <h1>{session.admin ? "Aucun repas" : "dumbfood"}</h1>
-                {session.admin ? (
-                  <button
-                    className="button primary"
-                    onClick={() => setModal({ kind: "event" })}
-                  >
-                    <Plus size={18} /> Nouveau repas
-                  </button>
-                ) : (
-                  <>
-                    <p>Ouvrez le lien partagé par l’organisateur.</p>
-                    <a className="button secondary" href="/admin">
-                      Administration
-                    </a>
-                  </>
-                )}
-              </div>
+              session.admin ? (
+                <AdminHome
+                  events={events}
+                  onOpen={(event) => selectEvent(event.shareToken)}
+                  onEdit={(event) => setModal({ kind: "event", event })}
+                  onCreate={() => setModal({ kind: "event" })}
+                />
+              ) : (
+                <div className="welcome-wrap">
+                  <h1>dumbfood</h1>
+                  <p>Ouvrez le lien partagé par l’organisateur.</p>
+                  <a className="button secondary" href="/admin">
+                    Administration
+                  </a>
+                </div>
+              )
             ) : pageError ? (
               <div className="page-state">
                 <h1>Repas introuvable</h1>
@@ -620,6 +562,16 @@ function App() {
             ) : (
               <>
                 <div className="event-heading">
+                  {session.admin && (
+                    <button
+                      className="icon-button event-back"
+                      aria-label="Tous les repas"
+                      title="Tous les repas"
+                      onClick={goAdmin}
+                    >
+                      <ArrowLeft size={20} />
+                    </button>
+                  )}
                   <h1>{event!.title}</h1>
                   <button
                     className="icon-button"
@@ -636,22 +588,7 @@ function App() {
                     · {timeOf(event!.date)}
                   </span>
                   {event!.location && <span>{event!.location}</span>}
-                  <span
-                    className={`connection ${connection}`}
-                    role="status"
-                    aria-label={
-                      connection === "live"
-                        ? "Synchronisé en direct"
-                        : "Reconnexion en cours"
-                    }
-                    title={
-                      connection === "live"
-                        ? "En direct"
-                        : "Reconnexion en cours"
-                    }
-                  >
-                    <span />
-                  </span>
+                  {event!.address && <AddressLink address={event!.address} />}
                   {event!.archived && <span>Archivé</span>}
                 </div>
                 {connection === "offline" && (
@@ -998,15 +935,13 @@ function App() {
                       : "Ajouter un apport"
                     : modal.kind === "activity"
                       ? "Historique"
-                      : modal.kind === "navigation"
-                        ? "Vos repas"
-                        : modal.kind === "share"
-                          ? "Partager le repas"
-                          : modal.kind === "options"
-                            ? "Repas"
-                            : modal.kind === "info"
-                              ? "Informations"
-                              : modal.title
+                      : modal.kind === "share"
+                        ? "Partager le repas"
+                        : modal.kind === "options"
+                          ? "Repas"
+                          : modal.kind === "info"
+                            ? "Informations"
+                            : modal.title
           }
           onClose={() => !submitting && setModal(null)}
         >
@@ -1046,10 +981,7 @@ function App() {
                     <Settings2 size={18} />
                     <span>Modifier le repas</span>
                   </button>
-                  <button
-                    aria-label="Choisir un repas"
-                    onClick={() => setModal({ kind: "navigation" })}
-                  >
+                  <button aria-label="Choisir un repas" onClick={goAdmin}>
                     <Menu size={18} />
                     <span>Autres repas</span>
                   </button>
@@ -1077,6 +1009,7 @@ function App() {
                 {formatDate(event.date)} · {timeOf(event.date)}
               </p>
               {event.location && <p>{event.location}</p>}
+              {event.address && <AddressLink address={event.address} />}
               {event.description && <p>{event.description}</p>}
             </div>
           )}
@@ -1154,13 +1087,8 @@ function App() {
                             `/events/${modal.event!.id}?version=${modal.event!.version}`,
                             { method: "DELETE" },
                           );
-                          tokenRef.current = "";
-                          setToken("");
-                          setSnapshot(null);
-                          window.history.pushState({}, "", "/admin");
-                          const remaining = await refreshEvents();
-                          if (remaining.length)
-                            selectEvent(remaining[0].shareToken);
+                          goAdmin();
+                          await refreshEvents();
                         },
                       })
                   : undefined
@@ -1269,59 +1197,6 @@ function App() {
               }
             />
           )}
-          {modal.kind === "navigation" && (
-            <div className="mobile-navigation">
-              <div className="event-nav">
-                {visibleEvents.map((e) => (
-                  <button
-                    key={e.id}
-                    className={`event-nav-button ${token === e.shareToken ? "selected" : ""}`}
-                    onClick={() => {
-                      selectEvent(e.shareToken);
-                      setModal(null);
-                    }}
-                  >
-                    <span className="event-nav-icon">
-                      <CookingPot size={19} />
-                    </span>
-                    <span>
-                      {e.title}
-                      <small>
-                        {formatDate(e.date, { day: "numeric", month: "long" })}
-                        {e.archived ? " · Archivé" : ""}
-                      </small>
-                    </span>
-                    <ChevronRight size={16} />
-                  </button>
-                ))}
-              </div>
-              {events.some((e) => e.archived) && (
-                <button
-                  className="text-button"
-                  onClick={() => setShowArchived(!showArchived)}
-                >
-                  {showArchived
-                    ? "Masquer les archives"
-                    : "Afficher les archives"}
-                </button>
-              )}
-              <button
-                className="button primary full-width"
-                onClick={() => setModal({ kind: "event" })}
-              >
-                <Plus size={17} /> Nouveau repas
-              </button>
-              <button
-                className="sidebar-utility mobile-logout"
-                onClick={() => {
-                  setModal(null);
-                  signOut();
-                }}
-              >
-                <LogOut size={16} /> Déconnexion
-              </button>
-            </div>
-          )}
           {modal.kind === "activity" && (
             <div className="activity-list">
               {snapshot?.activity.length ? (
@@ -1337,6 +1212,7 @@ function App() {
                           month: "short",
                           hour: "2-digit",
                           minute: "2-digit",
+                          hourCycle: "h23",
                         })}
                       </time>
                     </div>
@@ -1539,6 +1415,13 @@ function IdentityForm({
     </form>
   );
 }
+type EventFormData = {
+  title: string;
+  date?: string;
+  location: string;
+  address: string;
+  description: string;
+};
 function EventForm({
   event,
   busy,
@@ -1548,36 +1431,58 @@ function EventForm({
 }: {
   event?: MealEvent;
   busy: boolean;
-  onSubmit: (data: {
-    title: string;
-    date: string;
-    location: string;
-    description: string;
-  }) => void;
+  onSubmit: (data: EventFormData) => void;
   onArchive?: () => void;
   onDelete?: () => void;
 }) {
-  const localDate = (value: string) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  };
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const initial = event ? new Date(event.date) : null;
+  const quarters = ["00", "15", "30", "45"];
+  const originalMinute = initial ? pad(initial.getMinutes()) : "00";
+  const legacyTime = !!initial && !quarters.includes(originalMinute);
   const [title, setTitle] = useState(event?.title || "");
-  const [date, setDate] = useState(event ? localDate(event.date) : "");
+  const [day, setDay] = useState(
+    initial
+      ? `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-${pad(initial.getDate())}`
+      : "",
+  );
+  const [hour, setHour] = useState(initial ? pad(initial.getHours()) : "19");
+  const [minute, setMinute] = useState(legacyTime ? "" : originalMinute);
+  const [scheduleTouched, setScheduleTouched] = useState(false);
   const [location, setLocation] = useState(event?.location || "");
+  const [address, setAddress] = useState(event?.address || "");
   const [description, setDescription] = useState(event?.description || "");
+  const [localError, setLocalError] = useState("");
+  const scheduleRequired = !event || scheduleTouched;
   return (
     <form
       className="modal-form"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({
+        setLocalError("");
+        const data: EventFormData = {
           title: title.trim(),
-          date: new Date(date).toISOString(),
           location: location.trim(),
+          address: address.trim(),
           description: description.trim(),
-        });
+        };
+        if (scheduleRequired) {
+          if (!day || !hour || !quarters.includes(minute)) {
+            setLocalError("Choisissez une date et une heure complète.");
+            return;
+          }
+          const chosen = new Date(`${day}T${hour}:${minute}:00`);
+          if (
+            Number.isNaN(chosen.getTime()) ||
+            chosen.getHours() !== Number(hour) ||
+            chosen.getMinutes() !== Number(minute)
+          ) {
+            setLocalError("Cette heure n’existe pas pour la date choisie.");
+            return;
+          }
+          data.date = chosen.toISOString();
+        }
+        onSubmit(data);
       }}
     >
       <label htmlFor="event-title">Nom du repas</label>
@@ -1589,14 +1494,70 @@ function EventForm({
         required
         placeholder="Raclette entre amis"
       />
-      <label htmlFor="event-date">Date et heure</label>
-      <input
-        id="event-date"
-        type="datetime-local"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
-        required
-      />
+      <div className="schedule-fields">
+        <div className="schedule-date">
+          <label htmlFor="event-date">Date</label>
+          <input
+            id="event-date"
+            type="date"
+            value={day}
+            onChange={(e) => {
+              setDay(e.target.value);
+              setScheduleTouched(true);
+            }}
+            required={scheduleRequired}
+          />
+        </div>
+        <div>
+          <label htmlFor="event-hour">Heure</label>
+          <div className="schedule-time">
+            <select
+              id="event-hour"
+              aria-label="Heure"
+              value={hour}
+              onChange={(e) => {
+                setHour(e.target.value);
+                setScheduleTouched(true);
+              }}
+              required={scheduleRequired}
+            >
+              {Array.from({ length: 24 }, (_, i) => pad(i)).map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+            <span className="time-separator">:</span>
+            <select
+              id="event-minute"
+              aria-label="Minutes"
+              value={minute}
+              onChange={(e) => {
+                setMinute(e.target.value);
+                setScheduleTouched(true);
+              }}
+              required={scheduleRequired}
+            >
+              {legacyTime && (
+                <option value="" disabled>
+                  —
+                </option>
+              )}
+              {quarters.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+      {legacyTime && !scheduleTouched && (
+        <p className="field-hint legacy-time">
+          Horaire actuel : {timeOf(event!.date)}. Il sera conservé si vous ne le
+          modifiez pas.
+        </p>
+      )}
       <label htmlFor="event-location">
         Lieu <span>Facultatif</span>
       </label>
@@ -1607,6 +1568,17 @@ function EventForm({
         maxLength={200}
         placeholder="Chez Camille"
       />
+      <label htmlFor="event-address">
+        Adresse <span>Facultatif</span>
+      </label>
+      <input
+        id="event-address"
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+        maxLength={500}
+        autoComplete="street-address"
+        placeholder="Numéro, rue, ville"
+      />
       <label htmlFor="event-description">
         Description <span>Facultatif</span>
       </label>
@@ -1615,15 +1587,20 @@ function EventForm({
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         maxLength={1000}
-        rows={3}
-        placeholder="Informations utiles pour le repas"
+        rows={2}
+        placeholder="Informations utiles"
       />
+      {localError && (
+        <p className="field-error" role="alert">
+          {localError}
+        </p>
+      )}
       <button className="button primary full-width" disabled={busy}>
         {busy ? (
           <LoaderCircle className="spin" size={17} />
         ) : (
           <Check size={17} />
-        )}{" "}
+        )}
         {event ? "Enregistrer" : "Créer"}
       </button>
       {event && (
@@ -1710,10 +1687,10 @@ function ItemForm({
           name: name.trim(),
           category,
           unit,
-          target: admin && hasTarget ? Number(target) : null,
+          target: admin && hasTarget ? parseQuantity(target) : null,
           participantId: person.id,
-          quantity: Number(quantity),
-          capacity: unit === "place" ? Number(capacity) : null,
+          quantity: parseQuantity(quantity),
+          capacity: unit === "place" ? parseQuantity(capacity) : null,
         });
       } catch (error) {
         setLocalError((error as Error).message);
@@ -1723,12 +1700,12 @@ function ItemForm({
         name: name.trim(),
         category,
         unit,
-        target: admin && hasTarget ? Number(target) : null,
+        target: admin && hasTarget ? parseQuantity(target) : null,
         ...(!item && quantity
           ? {
               participantId: personId,
-              quantity: Number(quantity),
-              capacity: unit === "place" ? Number(capacity) : null,
+              quantity: parseQuantity(quantity),
+              capacity: unit === "place" ? parseQuantity(capacity) : null,
             }
           : {}),
       });
@@ -1784,19 +1761,16 @@ function ItemForm({
             <span>Définir un objectif</span>
           </label>
           {hasTarget && (
-            <div className="input-unit">
-              <input
-                type="number"
-                aria-label="Objectif"
-                min={unit === "place" || unit === "piece" ? 1 : 0.001}
-                step={unit === "place" || unit === "piece" ? 1 : "any"}
-                required
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                placeholder="Quantité souhaitée"
-              />
-              <span>{unitLabels[unit]}</span>
-            </div>
+            <QuantityInput
+              id="item-target"
+              label="Objectif"
+              unit={unit}
+              required
+              value={target}
+              onChange={setTarget}
+              placeholder="Quantité souhaitée"
+              unitLabel={unitLabels[unit]}
+            />
           )}
         </div>
       )}
@@ -1805,31 +1779,27 @@ function ItemForm({
           <label htmlFor="item-first-quantity">
             Premier apport <span>Facultatif</span>
           </label>
-          <div className="input-unit">
-            <input
-              id="item-first-quantity"
-              type="number"
-              min={unit === "place" || unit === "piece" ? 1 : 0.001}
-              step={unit === "place" || unit === "piece" ? 1 : "any"}
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              placeholder="Quantité"
-            />
-            <span>{unit === "place" ? "appareil(s)" : unitLabels[unit]}</span>
-          </div>
+          <QuantityInput
+            id="item-first-quantity"
+            label="Premier apport"
+            unit={unit}
+            value={quantity}
+            onChange={setQuantity}
+            placeholder="Quantité"
+            unitLabel={unit === "place" ? "appareil(s)" : unitLabels[unit]}
+          />
           {quantity && (
             <>
               {unit === "place" && (
                 <>
                   <label htmlFor="item-capacity">Places par appareil</label>
-                  <input
+                  <QuantityInput
                     id="item-capacity"
-                    type="number"
-                    min="1"
-                    step="1"
+                    label="Places par appareil"
+                    unit="place"
                     required
                     value={capacity}
-                    onChange={(e) => setCapacity(e.target.value)}
+                    onChange={setCapacity}
                   />
                 </>
               )}
@@ -1963,8 +1933,8 @@ function ContributionForm({
         onSubmit({
           participantId: personId,
           personName: personName.trim(),
-          quantity: Number(quantity),
-          capacity: item.unit === "place" ? Number(capacity) : null,
+          quantity: parseQuantity(quantity),
+          capacity: item.unit === "place" ? parseQuantity(capacity) : null,
           note: note.trim(),
         });
       }}
@@ -1989,37 +1959,35 @@ function ContributionForm({
       <label htmlFor="contribution-quantity">
         {item.unit === "place" ? "Nombre d’appareils" : "Quantité"}
       </label>
-      <div className="input-unit">
-        <input
-          id="contribution-quantity"
-          type="number"
-          min={item.unit === "place" || item.unit === "piece" ? 1 : 0.001}
-          step={item.unit === "place" || item.unit === "piece" ? 1 : "any"}
-          required
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-          placeholder={item.unit === "g" ? "500" : "1"}
-        />
-        <span>
-          {item.unit === "place" ? "appareil(s)" : unitLabels[item.unit]}
-        </span>
-      </div>
+      <QuantityInput
+        id="contribution-quantity"
+        label={item.unit === "place" ? "Nombre d’appareils" : "Quantité"}
+        unit={item.unit}
+        required
+        value={quantity}
+        onChange={setQuantity}
+        placeholder={item.unit === "g" ? "500" : "1"}
+        unitLabel={
+          item.unit === "place" ? "appareil(s)" : unitLabels[item.unit]
+        }
+      />
       {item.unit === "place" && (
         <>
           <label htmlFor="contribution-capacity">Places par appareil</label>
-          <input
+          <QuantityInput
             id="contribution-capacity"
-            type="number"
-            min="1"
-            step="1"
+            label="Places par appareil"
+            unit="place"
             required
             value={capacity}
-            onChange={(e) => setCapacity(e.target.value)}
+            onChange={setCapacity}
           />
           <div className="capacity-preview">
             <Check size={15} />
-            {number(Number(quantity || 0) * Number(capacity || 0))} places
-            apportées au total
+            {number(
+              parseQuantity(quantity || "0") * parseQuantity(capacity || "0"),
+            )}{" "}
+            places apportées au total
           </div>
         </>
       )}

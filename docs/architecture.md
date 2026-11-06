@@ -26,13 +26,15 @@ Le même serveur distribue l’interface et expose `/api`, ce qui conserve les r
 
 | Entité | Champs principaux | Relation |
 | --- | --- | --- |
-| Événement | Titre, date, lieu, description, lien de partage, état archivé, version | Possède les participants et les éléments |
+| Événement | Titre, date, lieu, adresse, description, lien de partage, état archivé, version | Possède les participants et les éléments |
 | Participant | Identifiant stable, prénom | Appartient à un événement |
 | Élément | Nom, catégorie, unité, objectif facultatif, version | Appartient à un événement |
 | Apport | Personne, quantité, capacité éventuelle, note, version | Relie un participant à un élément du même événement |
 | Historique | Auteur déclaré, description, date | Appartient à un événement |
 
 Les catégories sont `ingredient` et `equipment`. Les unités sont les grammes (`g`), litres (`L`), portions (`portion`), places (`place`) et pièces (`piece`).
+
+L’adresse est facultative et distincte du nom du lieu. Lorsqu’elle est renseignée, l’interface propose un lien Maps contenant cette adresse encodée. Les nouvelles dates sont saisies en format 24 h, avec des minutes limitées à `00`, `15`, `30` et `45`. Les anciens horaires restent conservés si l’admin ne modifie pas la date ou l’heure.
 
 Le prénom du participant désigne la personne qui apporte. L’auteur de la modification provient de la session de la personne qui utilise l’application. Thomas peut ainsi enregistrer l’apport d’Anne tout en signant la modification avec son propre prénom.
 
@@ -47,14 +49,16 @@ L’administrateur saisit directement l’objectif d’un élément. Cet objecti
 
 Exemple : un appareil de 6 places et un appareil de 8 places couvrent 14 places. Pour un objectif de 12 places, la progression affichée est de 117 %.
 
-Les pourcentages sont calculés à partir des apports. Le résumé d’un repas compte les objectifs atteints ; il n’additionne pas des grammes, des litres et des places dans un pourcentage global.
+Les pourcentages sont calculés à partir des apports, séparément pour chaque élément. Les grammes, litres et places ne sont pas additionnés dans un pourcentage global.
+
+L’API valide les quantités et objectifs : ils sont positifs et entiers pour les grammes, portions, places et pièces ; les litres acceptent des décimales. L’interface accepte la virgule pour les litres et la convertit avant l’envoi à l’API. Les commandes de quantité avancent ou reculent d’une unité, y compris pour les litres.
 
 ## Droits et partage
 
 | Action | Administrateur connecté | Invité ayant indiqué son prénom |
 | --- | --- | --- |
 | Créer ou gérer les événements | Oui | Non |
-| Modifier le titre, la date, le lieu ou la description | Oui | Non |
+| Modifier le titre, la date, le lieu, l’adresse ou la description | Oui | Non |
 | Ajouter un élément | Oui | Oui, sans objectif |
 | Modifier le nom, l’unité ou l’objectif d’un élément | Oui | Non |
 | Supprimer un élément et ses apports | Oui | Non |
@@ -81,6 +85,8 @@ Les événements, éléments et apports possèdent un numéro de version. Une mo
 ## Persistance et exploitation
 
 SQLite utilise les clés étrangères, le mode WAL et un délai d’attente pour les écritures concurrentes. Le volume Docker contient la base et ses fichiers associés ; remplacer le conteneur conserve les repas.
+
+Le schéma v2 ajoute la colonne d’adresse avec une valeur vide pour les événements existants. La migration est idempotente et ne réécrit ni les horaires ni les anciennes quantités.
 
 Cette architecture vise une instance de l’application. Le serveur garde les connexions WebSocket en mémoire, et le volume SQLite est local à l’installation. Une future exécution sur plusieurs instances demanderait une base et un mécanisme de diffusion partagés.
 

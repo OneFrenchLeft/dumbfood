@@ -6,6 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
+import { DatabaseSync } from "node:sqlite";
 import WebSocket from "ws";
 import type {
   Contribution,
@@ -22,8 +23,64 @@ await once(reservation, "listening");
 const port = (reservation.address() as { port: number }).port;
 await new Promise<void>((resolve) => reservation.close(() => resolve()));
 const origin = `http://127.0.0.1:${port}`;
+const legacyEvent = {
+  id: "legacy-event",
+  shareToken: "legacy-repas-avant-mise-a-jour",
+  date: "2026-11-21T19:10",
+};
 let process: ChildProcess | undefined;
 let output = "";
+
+function seedVersionOneDatabase() {
+  const database = new DatabaseSync(join(temporary, "test.db"));
+  database.exec(`
+    CREATE TABLE events (id TEXT PRIMARY KEY, title TEXT NOT NULL, date TEXT NOT NULL, location TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', shareToken TEXT NOT NULL UNIQUE, archived INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE participants (id TEXT PRIMARY KEY, eventId TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, name TEXT NOT NULL);
+    CREATE TABLE items (id TEXT PRIMARY KEY, eventId TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, name TEXT NOT NULL, category TEXT NOT NULL, unit TEXT NOT NULL, target REAL, version INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE contributions (id TEXT PRIMARY KEY, itemId TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE, participantId TEXT NOT NULL REFERENCES participants(id) ON DELETE CASCADE, quantity REAL NOT NULL, capacity REAL, note TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1);
+    PRAGMA user_version=1;
+  `);
+  database
+    .prepare(
+      "INSERT INTO events(id,title,date,location,description,shareToken,version) VALUES(?,?,?,?,?,?,?)",
+    )
+    .run(
+      legacyEvent.id,
+      "Repas avant mise à jour",
+      legacyEvent.date,
+      "Ancien lieu",
+      "Informations conservées",
+      legacyEvent.shareToken,
+      7,
+    );
+  database
+    .prepare("INSERT INTO participants(id,eventId,name) VALUES(?,?,?)")
+    .run("legacy-person", legacyEvent.id, "Anne");
+  database
+    .prepare(
+      "INSERT INTO items(id,eventId,name,category,unit,target) VALUES(?,?,?,?,?,?)",
+    )
+    .run(
+      "legacy-item",
+      legacyEvent.id,
+      "Ancien ingrédient",
+      "ingredient",
+      "g",
+      5.5,
+    );
+  database
+    .prepare(
+      "INSERT INTO contributions(id,itemId,participantId,quantity,note) VALUES(?,?,?,?,?)",
+    )
+    .run(
+      "legacy-contribution",
+      "legacy-item",
+      "legacy-person",
+      0.5,
+      "Avant la mise à jour",
+    );
+  database.close();
+}
 
 async function startServer() {
   output = "";
@@ -185,6 +242,7 @@ async function contribution(
 }
 
 before(async () => {
+  seedVersionOneDatabase();
   await startServer();
   await admin.ok("POST", "/api/admin/login", { password });
   await anne.ok("POST", "/api/identity", { name: "Anne" });
@@ -660,6 +718,10 @@ test("two connected phones receive updates for their meal only", async () => {
 
 test("meals and contributions survive a server restart", async () => {
   const event = await createEvent();
+  await admin.ok("PATCH", `/api/events/${event.id}`, {
+    address: "Place de la République, Paris",
+    version: event.version,
+  });
   const participant = await person(anne, event, "Anne");
   const cheese = await item(event, "Fromage");
   const initial = await contribution(anne, event, cheese, participant, 750);
@@ -667,6 +729,7 @@ test("meals and contributions survive a server restart", async () => {
   await startServer();
   const snapshot = await read(event);
   assert.equal(snapshot.event.title, event.title);
+  assert.equal(snapshot.event.address, "Place de la République, Paris");
   assert.equal(
     snapshot.contributions.find((row) => row.id === initial.id)?.quantity,
     750,
@@ -675,5 +738,273 @@ test("meals and contributions survive a server restart", async () => {
     (await admin.ok("GET", "/api/session")).admin,
     true,
     "Signed admin session remains valid after restart",
+  );
+});
+
+test("an existing version-one database gains an address without rounding old dates or quantities", async () => {
+  const snapshot: EventSnapshot = await anonymous.ok(
+    "GET",
+    `/api/events/${legacyEvent.shareToken}`,
+  );
+  assert.equal(snapshot.event.address, "");
+  assert.equal(snapshot.event.date, legacyEvent.date);
+  assert.equal(snapshot.event.location, "Ancien lieu");
+  assert.equal(snapshot.event.description, "Informations conservées");
+  assert.equal(snapshot.items[0].target, 5.5);
+  assert.equal(snapshot.contributions[0].quantity, 0.5);
+  const inspection = new DatabaseSync(join(temporary, "test.db"));
+  assert.equal(
+    inspection
+      .prepare("PRAGMA table_info(events)")
+      .all()
+      .filter((column) => column.name === "address").length,
+    1,
+  );
+  inspection.close();
+
+  await admin.ok("PATCH", `/api/events/${legacyEvent.id}`, {
+    title: "Repas conservé",
+    address: "  Place de la République, Paris  ",
+    version: snapshot.event.version,
+  });
+  await admin.ok(
+    "PATCH",
+    "/api/items/legacy-item",
+    { name: "Ingrédient renommé", version: snapshot.items[0].version },
+    legacyEvent.shareToken,
+  );
+  await thomas.ok(
+    "PATCH",
+    "/api/contributions/legacy-contribution",
+    { note: "Note corrigée", version: snapshot.contributions[0].version },
+    legacyEvent.shareToken,
+  );
+  const updated: EventSnapshot = await anonymous.ok(
+    "GET",
+    `/api/events/${legacyEvent.shareToken}`,
+  );
+  assert.equal(
+    updated.event.date,
+    legacyEvent.date,
+    "A metadata edit must not reschedule an old non-quarter time",
+  );
+  assert.equal(updated.event.address, "Place de la République, Paris");
+  assert.equal(updated.items[0].target, 5.5);
+  assert.equal(updated.contributions[0].quantity, 0.5);
+  assert.equal(updated.contributions[0].note, "Note corrigée");
+});
+
+test("addresses are optional, trimmed, synchronized, and protected by admin permissions and versions", async () => {
+  const event = await createEvent();
+  assert.equal(event.address, "");
+  const socket = new WebSocket(
+    `ws://127.0.0.1:${port}/ws?event=${event.shareToken}`,
+    { origin },
+  );
+  try {
+    await once(socket, "open");
+    const changed = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("Address update was not synchronized")),
+        2000,
+      );
+      socket.on("message", (message) => {
+        if (JSON.parse(String(message)).type === "changed") {
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+    });
+    await admin.ok("PATCH", `/api/events/${event.id}`, {
+      address: "  10 rue de Rivoli, Paris  ",
+      version: event.version,
+    });
+    await changed;
+    const updated = (await read(event)).event;
+    assert.equal(updated.address, "10 rue de Rivoli, Paris");
+    assert.equal(updated.date, event.date);
+    assert.equal(updated.location, event.location);
+    assert.equal(
+      (
+        await thomas.request("PATCH", `/api/events/${event.id}`, {
+          address: "Autre adresse",
+          version: updated.version,
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await admin.request("PATCH", `/api/events/${event.id}`, {
+          address: "Ancienne modification",
+          version: event.version,
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await admin.request("PATCH", `/api/events/${event.id}`, {
+          address: "x".repeat(501),
+          version: updated.version,
+        })
+      ).status,
+      400,
+    );
+    assert.equal((await read(event)).event.address, updated.address);
+  } finally {
+    socket.terminate();
+  }
+});
+
+test("new event times use quarter hours and reject seconds or intermediate minutes", async () => {
+  for (const minutes of ["00", "15", "30", "45"]) {
+    const created: MealEvent = await admin.ok("POST", "/api/events", {
+      title: `Horaire ${minutes}`,
+      date: `2026-11-21T19:${minutes}:00.000+01:00`,
+    });
+    assert.equal(created.date, `2026-11-21T19:${minutes}:00.000+01:00`);
+  }
+  const event = await createEvent();
+  for (const date of [
+    "2026-11-21T19:01",
+    "2026-11-21T19:10",
+    "2026-11-21T19:59",
+    "2026-11-21T19:30:01",
+    "2026-11-21T19:30:00.001Z",
+  ]) {
+    assert.equal(
+      (
+        await admin.request("POST", "/api/events", {
+          title: "Horaire non autorisé",
+          date,
+        })
+      ).status,
+      400,
+      date,
+    );
+    assert.equal(
+      (
+        await admin.request("PATCH", `/api/events/${event.id}`, {
+          date,
+          version: event.version,
+        })
+      ).status,
+      400,
+      date,
+    );
+  }
+  assert.equal((await read(event)).event.date, event.date);
+});
+
+test("only litre quantities and targets accept decimals, including edits and combined creation", async () => {
+  const event = await createEvent();
+  const participant = await person(anne, event, "Anne");
+  for (const unit of ["g", "portion", "place", "piece"]) {
+    const fields = {
+      name: `Objectif ${unit}`,
+      category: unit === "place" ? "equipment" : "ingredient",
+      unit,
+    };
+    assert.equal(
+      (
+        await admin.request("POST", `/api/events/${event.shareToken}/items`, {
+          ...fields,
+          target: 1.5,
+        })
+      ).status,
+      400,
+      `Decimal target in ${unit}`,
+    );
+    const entry = await item(event, `Entiers ${unit}`, unit, 3);
+    assert.equal(
+      (
+        await admin.request(
+          "PATCH",
+          `/api/items/${entry.id}`,
+          { target: 1.5, version: entry.version },
+          event.shareToken,
+        )
+      ).status,
+      400,
+      `Edited decimal target in ${unit}`,
+    );
+    assert.equal(
+      (
+        await anne.request(
+          "POST",
+          `/api/events/${event.shareToken}/contributions`,
+          {
+            itemId: entry.id,
+            participantId: participant.id,
+            quantity: 1.5,
+            ...(unit === "place" ? { capacity: 6 } : {}),
+          },
+          event.shareToken,
+        )
+      ).status,
+      400,
+      `Decimal apport in ${unit}`,
+    );
+    const valid = await contribution(
+      anne,
+      event,
+      entry,
+      participant,
+      1,
+      unit === "place" ? 6 : undefined,
+    );
+    assert.equal(
+      (
+        await thomas.request(
+          "PATCH",
+          `/api/contributions/${valid.id}`,
+          { quantity: 1.5, version: valid.version },
+          event.shareToken,
+        )
+      ).status,
+      400,
+      `Edited decimal apport in ${unit}`,
+    );
+    const before = await read(event);
+    assert.equal(
+      (
+        await anne.request("POST", `/api/events/${event.shareToken}/items`, {
+          ...fields,
+          name: `Création combinée ${unit}`,
+          target: null,
+          participantId: participant.id,
+          quantity: 1.5,
+          ...(unit === "place" ? { capacity: 6 } : {}),
+        })
+      ).status,
+      400,
+    );
+    const after = await read(event);
+    assert.equal(after.items.length, before.items.length);
+    assert.equal(after.contributions.length, before.contributions.length);
+  }
+  const drinks = await item(event, "Litres fractionnaires", "L", 1.5);
+  const drink = await contribution(anne, event, drinks, participant, 0.5);
+  await admin.ok(
+    "PATCH",
+    `/api/items/${drinks.id}`,
+    { target: 2.25, version: drinks.version },
+    event.shareToken,
+  );
+  await thomas.ok(
+    "PATCH",
+    `/api/contributions/${drink.id}`,
+    { quantity: 0.75, version: drink.version },
+    event.shareToken,
+  );
+  const snapshot = await read(event);
+  assert.equal(
+    snapshot.items.find((entry) => entry.id === drinks.id)?.target,
+    2.25,
+  );
+  assert.equal(
+    snapshot.contributions.find((entry) => entry.id === drink.id)?.quantity,
+    0.75,
   );
 });

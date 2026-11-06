@@ -93,11 +93,25 @@ function validCalendarDate(value: string): boolean {
   ][month - 1];
   return day >= 1 && day <= daysInMonth && Number.isFinite(Date.parse(value));
 }
-const date = z.string().max(40).refine(validCalendarDate, "Date invalide");
+function validQuarterHour(value: string): boolean {
+  const time = /T\d{2}:(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?/.exec(value);
+  if (!time) return false;
+  return (
+    Number(time[1]) % 15 === 0 &&
+    Number(time[2] ?? 0) === 0 &&
+    Number(time[3] ?? 0) === 0
+  );
+}
+const date = z
+  .string()
+  .max(40)
+  .refine(validCalendarDate, "Date invalide")
+  .refine(validQuarterHour, "Choisissez une heure à 00, 15, 30 ou 45 minutes.");
 const eventFields = {
   title: text,
   date,
   location: z.string().trim().max(200).default(""),
+  address: z.string().trim().max(500).default(""),
   description: z.string().trim().max(2000).default(""),
 };
 const itemFields = {
@@ -231,14 +245,19 @@ export function createApplication(options: ApplicationOptions) {
   function validateContribution(
     item: Item,
     value: { quantity: number; capacity?: number | null },
+    validateQuantity = true,
   ) {
     if (value.capacity != null && item.unit !== "place")
       fail(400, "La capacité est réservée aux éléments comptés en places.");
     if (
-      (item.unit === "piece" || item.unit === "place") &&
+      validateQuantity &&
+      item.unit !== "L" &&
       !Number.isInteger(value.quantity)
     )
-      fail(400, "Le nombre de pièces ou de places doit être entier.");
+      fail(
+        400,
+        "La quantité doit être entière. Seuls les litres acceptent les décimales.",
+      );
     if (value.capacity != null && !Number.isInteger(value.capacity))
       fail(400, "La capacité doit être un nombre entier de places.");
     if (
@@ -246,6 +265,17 @@ export function createApplication(options: ApplicationOptions) {
       !Number.isSafeInteger(value.quantity * value.capacity)
     )
       fail(400, "Le nombre total de places est trop élevé.");
+  }
+  function validateTarget(item: Pick<Item, "unit" | "target">) {
+    if (
+      item.target !== null &&
+      item.unit !== "L" &&
+      !Number.isInteger(item.target)
+    )
+      fail(
+        400,
+        "L’objectif doit être entier. Seuls les litres acceptent les décimales.",
+      );
   }
   function notify(eventId: string) {
     for (const [client, subscription] of subscriptions)
@@ -360,12 +390,13 @@ export function createApplication(options: ApplicationOptions) {
     };
     transaction(db, () => {
       db.prepare(
-        "INSERT INTO events(id,title,date,location,description,shareToken) VALUES(?,?,?,?,?,?)",
+        "INSERT INTO events(id,title,date,location,address,description,shareToken) VALUES(?,?,?,?,?,?,?)",
       ).run(
         event.id,
         event.title,
         event.date,
         event.location,
+        event.address,
         event.description,
         event.shareToken,
       );
@@ -380,6 +411,7 @@ export function createApplication(options: ApplicationOptions) {
         title: text,
         date,
         location: z.string().trim().max(200),
+        address: z.string().trim().max(500),
         description: z.string().trim().max(2000),
         archived: z.boolean(),
       })
@@ -397,11 +429,12 @@ export function createApplication(options: ApplicationOptions) {
       checkVersion(old.version, input.version);
       const value = { ...old, ...input, version: old.version + 1 };
       db.prepare(
-        "UPDATE events SET title=?,date=?,location=?,description=?,archived=?,version=? WHERE id=?",
+        "UPDATE events SET title=?,date=?,location=?,address=?,description=?,archived=?,version=? WHERE id=?",
       ).run(
         value.title,
         value.date,
         value.location,
+        value.address,
         value.description,
         Number(value.archived),
         value.version,
@@ -490,6 +523,7 @@ export function createApplication(options: ApplicationOptions) {
       version: 1,
     };
     transaction(db, () => {
+      validateTarget(item);
       if (input.participantId) participantFor(input.participantId, event.id);
       if (input.quantity !== undefined)
         validateContribution(item, {
@@ -550,6 +584,8 @@ export function createApplication(options: ApplicationOptions) {
       )
         fail(409, "Retirez les apports avant de changer l’unité.");
       const value = { ...old, ...input, version: old.version + 1 };
+      if (input.target !== undefined || input.unit !== undefined)
+        validateTarget(value);
       db.prepare(
         "UPDATE items SET name=?,category=?,unit=?,target=?,version=? WHERE id=?",
       ).run(
@@ -644,7 +680,7 @@ export function createApplication(options: ApplicationOptions) {
       checkVersion(old.version, input.version);
       const value = { ...old, ...input, version: old.version + 1 };
       const person = participantFor(value.participantId, event.id);
-      validateContribution(item, value);
+      validateContribution(item, value, input.quantity !== undefined);
       db.prepare(
         "UPDATE contributions SET participantId=?,quantity=?,capacity=?,note=?,version=? WHERE id=?",
       ).run(
@@ -702,15 +738,13 @@ export function createApplication(options: ApplicationOptions) {
   app.use(
     (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
       if (error instanceof z.ZodError) {
-        res
-          .status(400)
-          .json({
-            error: "Vérifiez les informations saisies.",
-            details: error.issues.map((i) => ({
-              field: i.path.join("."),
-              message: i.message,
-            })),
-          });
+        res.status(400).json({
+          error: "Vérifiez les informations saisies.",
+          details: error.issues.map((i) => ({
+            field: i.path.join("."),
+            message: i.message,
+          })),
+        });
         return;
       }
       if (error instanceof ApiError) {
@@ -723,11 +757,9 @@ export function createApplication(options: ApplicationOptions) {
         "type" in error &&
         error.type === "entity.too.large"
       ) {
-        res
-          .status(413)
-          .json({
-            error: "Le contenu envoyé est trop volumineux (16 Ko maximum).",
-          });
+        res.status(413).json({
+          error: "Le contenu envoyé est trop volumineux (16 Ko maximum).",
+        });
         return;
       }
       if (error instanceof SyntaxError && "body" in error) {

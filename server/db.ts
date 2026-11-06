@@ -15,7 +15,7 @@ export function openDatabase(path: string) {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
-    CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, title TEXT NOT NULL, date TEXT NOT NULL, location TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', shareToken TEXT NOT NULL UNIQUE, archived INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, title TEXT NOT NULL, date TEXT NOT NULL, location TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', shareToken TEXT NOT NULL UNIQUE, archived INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1);
     CREATE TABLE IF NOT EXISTS participants (id TEXT PRIMARY KEY, eventId TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, name TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, eventId TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, name TEXT NOT NULL, category TEXT NOT NULL CHECK(category IN ('ingredient','equipment')), unit TEXT NOT NULL CHECK(unit IN ('g','L','portion','place','piece')), target REAL CHECK(target IS NULL OR target>0), version INTEGER NOT NULL DEFAULT 1);
     CREATE TABLE IF NOT EXISTS contributions (id TEXT PRIMARY KEY, itemId TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE, participantId TEXT NOT NULL REFERENCES participants(id) ON DELETE CASCADE, quantity REAL NOT NULL CHECK(quantity>0), capacity REAL CHECK(capacity IS NULL OR capacity>0), note TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1);
@@ -23,8 +23,17 @@ export function openDatabase(path: string) {
     CREATE INDEX IF NOT EXISTS participants_event ON participants(eventId);
     CREATE INDEX IF NOT EXISTS items_event ON items(eventId);
     CREATE INDEX IF NOT EXISTS contributions_item ON contributions(itemId);
-    CREATE INDEX IF NOT EXISTS activity_event ON activity(eventId, createdAt);
-    PRAGMA user_version=1;`);
+    CREATE INDEX IF NOT EXISTS activity_event ON activity(eventId, createdAt);`);
+  transaction(db, () => {
+    const columns = db.prepare("PRAGMA table_info(events)").all();
+    if (!columns.some((column) => column.name === "address")) {
+      db.exec("ALTER TABLE events ADD COLUMN address TEXT NOT NULL DEFAULT ''");
+    }
+    const schemaVersion = Number(
+      db.prepare("PRAGMA user_version").get()?.user_version ?? 0,
+    );
+    if (schemaVersion < 2) db.exec("PRAGMA user_version=2");
+  });
   return db;
 }
 export type Db = ReturnType<typeof openDatabase>;
@@ -87,12 +96,13 @@ export function seedDemo(db: Db) {
   transaction(db, () => {
     const eventId = randomUUID();
     db.prepare(
-      "INSERT INTO events(id,title,date,location,description,shareToken) VALUES(?,?,?,?,?,?)",
+      "INSERT INTO events(id,title,date,location,address,description,shareToken) VALUES(?,?,?,?,?,?,?)",
     ).run(
       eventId,
       "Raclette entre amis",
       "2026-11-21T19:30",
       "Chez Anne & Thomas",
+      "Place de la République, Paris",
       "Une grande tablée, du fromage et de la bonne humeur. On s’occupe de tout, ensemble.",
       "demo-raclette-entre-amis",
     );
