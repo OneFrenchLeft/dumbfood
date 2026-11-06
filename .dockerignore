@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+dist
+build
+data
+backups
+work
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+test-results
+playwright-report
+docs/screenshots
+README.md

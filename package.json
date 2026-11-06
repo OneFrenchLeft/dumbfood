@@ -1,0 +1,39 @@
+{
+  "name": "dumbfood",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --env-file=.env --import tsx --watch server/index.ts",
+    "dev:ui": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
+    "start": "node --env-file-if-exists=.env build/server/index.js",
+    "test": "tsx --test tests/*.test.ts",
+    "test:browser": "npm run build && node scripts/check-browser.mjs",
+    "setup": "node scripts/setup.mjs",
+    "screenshots": "npm run build && node scripts/capture.mjs"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "ws": "^8.18.3",
+    "zod": "^4.1.12",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/ws": "^8.18.1",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "tsx": "^4.20.6",
+    "@playwright/test": "^1.56.1"
+  }
+}

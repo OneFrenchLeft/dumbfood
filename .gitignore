@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+data/
+backups/
+.env
+.env.*
+!.env.example
+work/
+test-results/
+playwright-report/
+*.db
+*.db-shm
+*.db-wal
