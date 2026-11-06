@@ -88,6 +88,11 @@ try {
       });
       await page.reload();
       await page
+        .locator(
+          'summary[aria-label="Voir les apports pour Fromage à raclette"]',
+        )
+        .click();
+      await page
         .getByRole("button", {
           name: "Modifier l’apport de Anne pour Fromage à raclette",
           exact: true,

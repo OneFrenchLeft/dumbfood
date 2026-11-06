@@ -25,6 +25,24 @@ let logs = "";
 child.stdout.on("data", (x) => (logs += x));
 child.stderr.on("data", (x) => (logs += x));
 let browser;
+async function openOptions(page) {
+  await page.getByRole("button", { name: "Options du repas", exact: true }).click();
+}
+async function optionsAction(page, action) {
+  await openOptions(page);
+  await page.getByRole("dialog").getByRole("button", { name: action, exact: true }).click();
+}
+async function chooseMeal(page) {
+  if (await page.getByRole("button", { name: "Options du repas", exact: true }).count()) {
+    await optionsAction(page, "Choisir un repas");
+  } else {
+    await page.getByRole("button", { name: "Choisir un repas", exact: true }).click();
+  }
+}
+async function expandItem(page, name) {
+  const summary = page.getByLabel(`Voir les apports pour ${name}`, { exact: true });
+  if (await summary.locator("..").getAttribute("open") === null) await summary.click();
+}
 try {
   let ready = false;
   for (let i = 0; i < 100; i++) {
@@ -96,9 +114,13 @@ try {
   await expect(
     phone.getByRole("heading", { name: "Fromage", exact: true }),
   ).toBeVisible();
+  await openOptions(phone);
   await expect(
-    phone.getByRole("button", { name: "Modifier le repas", exact: true }),
+    phone.getByRole("dialog").getByRole("button", { name: "Modifier le repas", exact: true }),
   ).toHaveCount(0);
+  await phone.getByRole("dialog").getByRole("button", { name: "Fermer", exact: true }).click();
+  await expect(phone.locator(".item-details").first()).not.toHaveAttribute("open");
+  await expandItem(phone, "Fromage");
   await expect(
     phone.getByRole("button", { name: "Modifier Fromage", exact: true }),
   ).toHaveCount(0);
@@ -127,8 +149,9 @@ try {
     .locator(".item-card")
     .filter({ has: page.getByRole("heading", { name: "Pain", exact: true }) });
   await expect(bread).toBeVisible();
-  await expect(bread.locator(".free-badge")).toHaveText("Libre");
+  await expect(bread.locator(".quantity-row")).toHaveText("2 pièces");
   await expect(bread.getByRole("progressbar")).toHaveCount(0);
+  await expandItem(page, "Pain");
   await page
     .getByRole("button", { name: "Modifier Pain", exact: true })
     .click();
@@ -149,15 +172,21 @@ try {
         has: phone.getByRole("heading", { name: "Anne", exact: true }),
       }),
   ).toContainText("Pain");
-  await phone
-    .getByRole("tab", { name: "Manquants", exact: false })
-    .click();
+  await phone.getByRole("tab", { name: "Liste", exact: true }).click();
+  await phone.getByRole("button", { name: "Afficher les éléments manquants", exact: true }).click();
+  await expect(phone.getByRole("button", { name: "Afficher les éléments manquants", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(
     phone.getByRole("heading", { name: "Fromage", exact: true }),
   ).toHaveCount(0);
   await expect(
     phone.getByRole("heading", { name: "Pain", exact: true }),
   ).toBeVisible();
+  await expect(phone.getByRole("searchbox", { name: "Rechercher un élément", exact: true })).toHaveCount(0);
+  await phone.getByRole("button", { name: "Rechercher dans la liste", exact: true }).click();
+  await phone.getByRole("searchbox", { name: "Rechercher un élément", exact: true }).fill("introuvable");
+  await expect(phone.getByRole("heading", { name: "Pain", exact: true })).toHaveCount(0);
+  await phone.getByRole("button", { name: "Fermer la recherche", exact: true }).click();
+  await expect(phone.getByRole("heading", { name: "Pain", exact: true })).toBeVisible();
   for (const width of [320, 390, 768, 1440]) {
     await phone.setViewportSize({ width, height: 844 });
     const dimensions = await phone.evaluate(() => ({
@@ -169,17 +198,13 @@ try {
         `Débordement horizontal à ${width}px: ${JSON.stringify(dimensions)}`,
       );
   }
-  await page
-    .getByRole("button", { name: "Modifier le repas", exact: true })
-    .click();
+  await optionsAction(page, "Modifier le repas");
   await page.locator("#event-title").fill("Repas renommé");
   await page.getByRole("dialog").getByRole("button", { name: "Enregistrer", exact: true }).click();
   await expect(
     phone.getByRole("heading", { name: "Repas renommé", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Modifier le repas", exact: true })
-    .click();
+  await optionsAction(page, "Modifier le repas");
   await page
     .getByRole("button", { name: "Supprimer le repas", exact: true })
     .click();
@@ -198,9 +223,7 @@ try {
   ).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   for (const title of ["Repas mobile un", "Repas mobile deux"]) {
-    await page
-      .getByRole("button", { name: "Choisir un repas", exact: true })
-      .click();
+    await chooseMeal(page);
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Nouveau repas", exact: true })
@@ -212,9 +235,7 @@ try {
       page.getByRole("heading", { name: title, exact: true }),
     ).toBeVisible();
   }
-  await page
-    .getByRole("button", { name: "Choisir un repas", exact: true })
-    .click();
+  await chooseMeal(page);
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Repas mobile un", exact: false })
@@ -222,19 +243,15 @@ try {
   await expect(
     page.getByRole("heading", { name: "Repas mobile un", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Choisir un repas", exact: true })
-    .click();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Déconnexion", exact: true })
-    .click();
+  await optionsAction(page, "Déconnexion");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await openOptions(page);
   await expect(
-    page.getByRole("button", { name: "Modifier le repas", exact: true }),
+    page.getByRole("dialog").getByRole("button", { name: "Modifier le repas", exact: true }),
   ).toHaveCount(0);
   if (errors.length) throw new Error(errors.join("\n"));
   console.log(
-    "QA navigateur OK : création admin desktop et mobile, objectifs, ajout libre mobile, édition pour autrui, WS 2 téléphones, filtres, responsive320–1440, renommage, suppression en direct, sélection de repas mobile et déconnexion. Aucune erreur JavaScript.",
+    "QA navigateur OK : création admin desktop et mobile, objectifs, ajout libre mobile, détails repliés, édition pour autrui, WS 2 téléphones, filtre manquants, recherche masquable, responsive320–1440, options, renommage, suppression en direct, sélection de repas mobile et déconnexion. Aucune erreur JavaScript.",
   );
 } finally {
   await browser?.close();

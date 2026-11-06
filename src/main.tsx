@@ -14,14 +14,17 @@ import {
   Link2,
   LoaderCircle,
   LogOut,
+  ListFilter,
   MapPin,
   Menu,
   MoreHorizontal,
   Plus,
   Search,
   Settings2,
+  ShieldCheck,
   Trash2,
   X,
+  Users,
 } from "lucide-react";
 import type {
   Contribution,
@@ -143,6 +146,8 @@ type ModalState =
   | { kind: "activity" }
   | { kind: "navigation" }
   | { kind: "share" }
+  | { kind: "options" }
+  | { kind: "info" }
   | {
       kind: "confirm";
       title: string;
@@ -173,10 +178,8 @@ function App() {
   const [loading, setLoading] = useState(!!initialToken);
   const [pageError, setPageError] = useState("");
   const [tab, setTab] = useState<"items" | "people" | "missing">("items");
-  const [category, setCategory] = useState<"all" | "ingredient" | "equipment">(
-    "all",
-  );
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<{
@@ -405,15 +408,9 @@ function App() {
   const event = snapshot?.event;
   const visibleEvents = events.filter((e) => showArchived || !e.archived);
   const targeted = snapshot?.items.filter((i) => i.target !== null) || [];
-  const covered = targeted.filter(
-    (i) => totalFor(i, snapshot?.contributions || []) >= (i.target || 0),
-  ).length;
-  const freeCount =
-    snapshot?.items.filter((i) => i.target === null).length || 0;
   const filteredItems =
     snapshot?.items.filter(
       (i) =>
-        (category === "all" || i.category === category) &&
         i.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()) &&
         (tab !== "missing" ||
           (i.target !== null &&
@@ -499,48 +496,52 @@ function App() {
           </aside>
         )}
         <div className="main-column">
-          <header className="topbar">
-            <div className="mobile-brand-group">
-              {session?.admin && (
-                <button
-                  className="mobile-admin-menu icon-button"
-                  aria-label="Choisir un repas"
-                  onClick={() => setModal({ kind: "navigation" })}
+          {!token && (
+            <header className="topbar">
+              <div className="mobile-brand-group">
+                {session?.admin && (
+                  <button
+                    className="mobile-admin-menu icon-button"
+                    aria-label="Choisir un repas"
+                    onClick={() => setModal({ kind: "navigation" })}
+                  >
+                    <Menu size={20} />
+                  </button>
+                )}
+                <a
+                  href={session?.admin ? "/admin" : "/"}
+                  className="mobile-brand"
                 >
-                  <Menu size={20} />
-                </button>
-              )}
-              <a
-                href={session?.admin ? "/admin" : "/"}
-                className="mobile-brand"
-              >
-                dumbfood
-              </a>
-            </div>
-            {session?.admin && <span className="topbar-label">Mes repas</span>}
-            <div className="topbar-actions">
-              {token && (
-                <span
-                  className={`connection ${connection}`}
-                  role="status"
-                  aria-label={
-                    connection === "live"
-                      ? "Synchronisé en direct"
-                      : "Reconnexion en cours"
-                  }
-                >
-                  <span />
-                  {connection === "live" ? "En direct" : "Reconnexion…"}
-                </span>
-              )}
-              {identityButton}
-              {!session?.admin && !token && (
-                <a href="/admin" className="text-button">
-                  Administration
+                  dumbfood
                 </a>
+              </div>
+              {session?.admin && (
+                <span className="topbar-label">Mes repas</span>
               )}
-            </div>
-          </header>
+              <div className="topbar-actions">
+                {token && (
+                  <span
+                    className={`connection ${connection}`}
+                    role="status"
+                    aria-label={
+                      connection === "live"
+                        ? "Synchronisé en direct"
+                        : "Reconnexion en cours"
+                    }
+                  >
+                    <span />
+                    {connection === "live" ? "En direct" : "Reconnexion…"}
+                  </span>
+                )}
+                {identityButton}
+                {!session?.admin && !token && (
+                  <a href="/admin" className="text-button">
+                    Administration
+                  </a>
+                )}
+              </div>
+            </header>
+          )}
           <main>
             {session === null ? (
               <div className="page-state">
@@ -620,83 +621,42 @@ function App() {
               <>
                 <div className="event-heading">
                   <h1>{event!.title}</h1>
-                  <div className="heading-actions">
-                    {session.admin && (
-                      <button
-                        className="icon-button"
-                        onClick={() => setModal({ kind: "event", event })}
-                        aria-label="Modifier le repas"
-                        title="Modifier le repas"
-                      >
-                        <Settings2 size={19} />
-                      </button>
-                    )}
-                    <button
-                      className="button secondary share-button"
-                      onClick={copyLink}
-                      aria-label="Partager le repas"
-                    >
-                      <Link2 size={17} />
-                      <span>Partager</span>
-                    </button>
-                  </div>
+                  <button
+                    className="icon-button"
+                    aria-label="Options du repas"
+                    title="Options du repas"
+                    onClick={() => setModal({ kind: "options" })}
+                  >
+                    <MoreHorizontal size={23} />
+                  </button>
                 </div>
                 <div className="event-meta">
                   <span>
-                    <CalendarDays size={15} />
-                    {formatDate(event!.date)} · {timeOf(event!.date)}
+                    {formatDate(event!.date, { day: "numeric", month: "long" })}{" "}
+                    · {timeOf(event!.date)}
                   </span>
-                  {event!.location && (
-                    <span>
-                      <MapPin size={15} />
-                      {event!.location}
-                    </span>
-                  )}
+                  {event!.location && <span>{event!.location}</span>}
+                  <span
+                    className={`connection ${connection}`}
+                    role="status"
+                    aria-label={
+                      connection === "live"
+                        ? "Synchronisé en direct"
+                        : "Reconnexion en cours"
+                    }
+                    title={
+                      connection === "live"
+                        ? "En direct"
+                        : "Reconnexion en cours"
+                    }
+                  >
+                    <span />
+                  </span>
                   {event!.archived && <span>Archivé</span>}
-                </div>
-                {event!.description && (
-                  <details className="event-description">
-                    <summary>Détails</summary>
-                    <p>{event!.description}</p>
-                  </details>
-                )}
-                <div className="overview-row">
-                  <div className="overview" aria-label="Résumé des apports">
-                    {targeted.length ? (
-                      <>
-                        <span>
-                          <strong>
-                            {covered}/{targeted.length}
-                          </strong>{" "}
-                          prêts
-                        </span>
-                        {freeCount > 0 && (
-                          <>
-                            <span className="summary-divider">·</span>
-                            <span>
-                              {freeCount} libre{freeCount > 1 ? "s" : ""}
-                            </span>
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <span>
-                        {snapshot.items.length
-                          ? `${snapshot.items.length} élément${snapshot.items.length > 1 ? "s" : ""} libre${snapshot.items.length > 1 ? "s" : ""}`
-                          : "Aucun élément"}
-                      </span>
-                    )}
-                  </div>
-                  <div className="list-toolbar">
-                    <button className="button secondary" onClick={addItem}>
-                      <Plus size={17} /> Ajouter
-                    </button>
-                  </div>
                 </div>
                 {connection === "offline" && (
                   <div className="offline-notice" role="status">
-                    Connexion interrompue. Les données seront actualisées à la
-                    reconnexion.
+                    Connexion interrompue. Reconnexion en cours.
                   </div>
                 )}
                 <div className="tabs-toolbar">
@@ -707,8 +667,8 @@ function App() {
                   >
                     <button
                       role="tab"
-                      aria-selected={tab === "items"}
-                      className={tab === "items" ? "active" : ""}
+                      aria-selected={tab !== "people"}
+                      className={tab !== "people" ? "active" : ""}
                       onClick={() => setTab("items")}
                     >
                       Liste
@@ -721,197 +681,232 @@ function App() {
                     >
                       Personnes
                     </button>
+                  </div>
+                  {tab !== "people" && (
+                    <div className="list-tools">
+                      <button
+                        className={`icon-button ${tab === "missing" ? "selected" : ""}`}
+                        aria-label="Afficher les éléments manquants"
+                        aria-pressed={tab === "missing"}
+                        title={`${totalMissing} éléments à compléter`}
+                        onClick={() =>
+                          setTab(tab === "missing" ? "items" : "missing")
+                        }
+                      >
+                        <ListFilter size={20} />
+                      </button>
+                      <button
+                        className={`icon-button ${searchOpen ? "selected" : ""}`}
+                        aria-label="Rechercher dans la liste"
+                        aria-expanded={searchOpen}
+                        title="Rechercher"
+                        onClick={() => {
+                          setSearchOpen(!searchOpen);
+                          if (searchOpen) setQuery("");
+                        }}
+                      >
+                        <Search size={19} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {searchOpen && tab !== "people" && (
+                  <div className="search-field">
+                    <Search size={17} />
+                    <input
+                      autoFocus
+                      aria-label="Rechercher un élément"
+                      type="search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Rechercher"
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          setQuery("");
+                          setSearchOpen(false);
+                        }
+                      }}
+                    />
                     <button
-                      role="tab"
-                      aria-selected={tab === "missing"}
-                      className={tab === "missing" ? "active" : ""}
-                      onClick={() => setTab("missing")}
+                      className="icon-button"
+                      aria-label="Fermer la recherche"
+                      onClick={() => {
+                        setQuery("");
+                        setSearchOpen(false);
+                      }}
                     >
-                      Manquants{" "}
-                      <span className="tab-count">{totalMissing}</span>
+                      <X size={18} />
                     </button>
                   </div>
-                  <button
-                    className="history-button icon-button"
-                    onClick={() => setModal({ kind: "activity" })}
-                    aria-label="Historique"
-                    title="Historique"
-                  >
-                    <History size={19} />
-                  </button>
-                </div>
+                )}
                 {tab !== "people" ? (
-                  <>
-                    <div className="filter-row">
-                      <div className="category-filters" aria-label="Catégorie">
-                        <button
-                          className={category === "all" ? "selected" : ""}
-                          onClick={() => setCategory("all")}
-                        >
-                          Tout
-                        </button>
-                        <button
-                          className={
-                            category === "ingredient" ? "selected" : ""
+                  <div className="item-grid">
+                    {(["ingredient", "equipment"] as const).map((group) => {
+                      const rows = filteredItems.filter(
+                        (item) => item.category === group,
+                      );
+                      return rows.length ? (
+                        <section
+                          className="item-section"
+                          key={group}
+                          aria-label={
+                            group === "ingredient" ? "Ingrédients" : "Matériel"
                           }
-                          onClick={() => setCategory("ingredient")}
                         >
-                          Ingrédients
-                        </button>
-                        <button
-                          className={category === "equipment" ? "selected" : ""}
-                          onClick={() => setCategory("equipment")}
-                        >
-                          Matériel
-                        </button>
-                      </div>
-                      <div className="search-field">
-                        <Search size={17} />
-                        <input
-                          aria-label="Rechercher un élément"
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                          placeholder="Rechercher"
-                        />
-                      </div>
-                    </div>
-                    <div className="item-grid">
-                      {filteredItems.map((item) => {
-                        const contributions = snapshot.contributions.filter(
-                          (c) => c.itemId === item.id,
-                        );
-                        const total = totalFor(item, snapshot.contributions);
-                        const percent = item.target
-                          ? Math.round((total / item.target) * 100)
-                          : null;
-                        const complete =
-                          item.target !== null && total >= item.target;
-                        return (
-                          <article
-                            key={item.id}
-                            className={`item-card ${complete ? "complete" : ""}`}
-                          >
-                            <div className="card-top">
-                              <h3>{item.name}</h3>
-                              {session.admin && (
-                                <button
-                                  className="card-menu icon-button"
-                                  aria-label={`Modifier ${item.name}`}
-                                  onClick={() =>
-                                    setModal({ kind: "item", item })
-                                  }
+                          <h2>
+                            {group === "ingredient"
+                              ? "Ingrédients"
+                              : "Matériel"}
+                          </h2>
+                          <div className="item-section-list">
+                            {rows.map((item) => {
+                              const contributions =
+                                snapshot.contributions.filter(
+                                  (c) => c.itemId === item.id,
+                                );
+                              const total = totalFor(
+                                item,
+                                snapshot.contributions,
+                              );
+                              const percent = item.target
+                                ? Math.round((total / item.target) * 100)
+                                : null;
+                              const complete =
+                                item.target !== null && total >= item.target;
+                              const names = Array.from(
+                                new Set(
+                                  contributions.map((c) =>
+                                    participantName(c.participantId),
+                                  ),
+                                ),
+                              ).join(", ");
+                              return (
+                                <article
+                                  className={`item-card ${complete ? "complete" : ""}`}
+                                  key={item.id}
                                 >
-                                  <MoreHorizontal size={20} />
-                                </button>
-                              )}
-                            </div>
-                            <div className="quantity-row">
-                              <div>
-                                <strong>
-                                  {item.target !== null
-                                    ? number(total)
-                                    : amount(total, item.unit)}
-                                </strong>
-                                {item.target !== null && (
-                                  <span>
-                                    {" "}
-                                    / {amount(item.target, item.unit)}
-                                  </span>
-                                )}
-                              </div>
-                              {percent !== null ? (
-                                <span
-                                  className={`percent ${complete ? "done" : ""}`}
-                                >
-                                  {percent} %
-                                </span>
-                              ) : (
-                                <span className="free-badge">Libre</span>
-                              )}
-                            </div>
-                            {item.target !== null && (
-                              <>
-                                <div
-                                  className="progress-track"
-                                  role="progressbar"
-                                  aria-label={`Progression ${item.name}`}
-                                  aria-valuenow={total}
-                                  aria-valuemin={0}
-                                  aria-valuemax={Math.max(total, item.target)}
-                                  aria-valuetext={`${percent} % de l’objectif`}
-                                >
-                                  <span
-                                    style={{
-                                      width: `${Math.min(100, (total / item.target) * 100)}%`,
-                                    }}
-                                  />
-                                </div>
-                                <div className="progress-caption">
-                                  {total < item.target
-                                    ? `Reste ${amount(item.target - total, item.unit)}`
-                                    : total > item.target
-                                      ? `+ ${amount(total - item.target, item.unit)}`
-                                      : "Complet"}
-                                </div>
-                              </>
-                            )}
-                            <div className="contributions-list">
-                              {contributions.length ? (
-                                contributions.map((c) => (
+                                  <details className="item-details">
+                                    <summary
+                                      className="item-summary"
+                                      aria-label={`Voir les apports pour ${item.name}`}
+                                    >
+                                      <h3>{item.name}</h3>
+                                      <div className="quantity-row">
+                                        {item.target !== null ? (
+                                          <>
+                                            <strong>{number(total)}</strong>
+                                            <span>
+                                              {" "}
+                                              / {amount(item.target, item.unit)}
+                                            </span>
+                                            <span className="percent">
+                                              {" "}
+                                              · {percent} %
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <strong>
+                                            {amount(total, item.unit)}
+                                          </strong>
+                                        )}
+                                      </div>
+                                      {names && (
+                                        <span className="item-people">
+                                          {names}
+                                        </span>
+                                      )}
+                                      {item.target !== null && (
+                                        <div
+                                          className="progress-track"
+                                          role="progressbar"
+                                          aria-label={`Progression ${item.name}`}
+                                          aria-valuenow={total}
+                                          aria-valuemin={0}
+                                          aria-valuemax={Math.max(
+                                            total,
+                                            item.target,
+                                          )}
+                                          aria-valuetext={`${percent} % de l’objectif`}
+                                        >
+                                          <span
+                                            style={{
+                                              width: `${Math.min(100, (total / item.target) * 100)}%`,
+                                            }}
+                                          />
+                                        </div>
+                                      )}
+                                    </summary>
+                                    <div className="contributions-list">
+                                      {contributions.length ? (
+                                        contributions.map((c) => (
+                                          <button
+                                            className="contribution-line"
+                                            key={c.id}
+                                            onClick={() =>
+                                              editContribution(item, c)
+                                            }
+                                            aria-label={`Modifier l’apport de ${participantName(c.participantId)} pour ${item.name}`}
+                                          >
+                                            <span>
+                                              {participantName(c.participantId)}
+                                              {c.note && (
+                                                <small>{c.note}</small>
+                                              )}
+                                            </span>
+                                            <strong>
+                                              {item.unit === "place"
+                                                ? `${number(c.quantity)} × ${number(c.capacity || 1)} places`
+                                                : amount(c.quantity, item.unit)}
+                                            </strong>
+                                            <ChevronRight size={15} />
+                                          </button>
+                                        ))
+                                      ) : (
+                                        <p className="no-contribution">
+                                          Aucun apport
+                                        </p>
+                                      )}
+                                    </div>
+                                    {session.admin && (
+                                      <button
+                                        className="item-edit text-button"
+                                        aria-label={`Modifier ${item.name}`}
+                                        onClick={() =>
+                                          setModal({ kind: "item", item })
+                                        }
+                                      >
+                                        <Settings2 size={15} /> Modifier
+                                        l’élément
+                                      </button>
+                                    )}
+                                  </details>
                                   <button
-                                    key={c.id}
-                                    className="contribution-line"
-                                    onClick={() => editContribution(item, c)}
-                                    aria-label={`Modifier l’apport de ${participantName(c.participantId)} pour ${item.name}`}
+                                    className="row-add icon-button"
+                                    aria-label={`Ajouter un apport pour ${item.name}`}
+                                    title="Ajouter un apport"
+                                    onClick={() => editContribution(item)}
                                   >
-                                    <span>
-                                      {participantName(c.participantId)}
-                                      {c.note && <small>{c.note}</small>}
-                                    </span>
-                                    <strong>
-                                      {item.unit === "place"
-                                        ? `${number(c.quantity)} × ${number(c.capacity || 1)} places`
-                                        : amount(c.quantity, item.unit)}
-                                    </strong>
-                                    <ChevronRight size={15} />
+                                    <Plus size={23} />
                                   </button>
-                                ))
-                              ) : (
-                                <div className="no-contribution">
-                                  Aucun apport
-                                </div>
-                              )}
-                            </div>
-                            <button
-                              className="card-add"
-                              onClick={() => editContribution(item)}
-                            >
-                              <Plus size={17} /> J’apporte
-                            </button>
-                          </article>
-                        );
-                      })}
-                      {!filteredItems.length && (
-                        <div className="empty-list">
-                          <h3>
-                            {tab === "missing" && !query
-                              ? "Tout est prévu"
-                              : snapshot.items.length
-                                ? "Aucun résultat"
-                                : "Aucun élément"}
-                          </h3>
-                          {!snapshot.items.length && (
-                            <button
-                              className="button secondary"
-                              onClick={addItem}
-                            >
-                              <Plus size={17} /> Ajouter un élément
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ) : null;
+                    })}
+                    {!filteredItems.length && (
+                      <div className="empty-list">
+                        <p>
+                          {tab === "missing" && !query
+                            ? "Rien à compléter"
+                            : snapshot.items.length
+                              ? "Aucun résultat"
+                              : "Aucun élément"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="people-grid">
                     {snapshot.participants.map((person) => {
@@ -919,7 +914,7 @@ function App() {
                         (c) => c.participantId === person.id,
                       );
                       return (
-                        <article className="person-card" key={person.id}>
+                        <section className="person-card" key={person.id}>
                           <div className="person-heading">
                             <h3>{person.name}</h3>
                             <span>
@@ -950,31 +945,19 @@ function App() {
                           ) : (
                             <p className="person-empty">Aucun apport</p>
                           )}
-                        </article>
+                        </section>
                       );
                     })}
                     {!snapshot.participants.length && (
                       <div className="empty-list">
-                        <h3>Aucun participant</h3>
+                        <p>Aucun participant</p>
                       </div>
                     )}
                   </div>
                 )}
-                <button
-                  className="button secondary add-item-end"
-                  onClick={addItem}
-                >
-                  <Plus size={17} /> Ajouter un élément
+                <button className="add-item-end text-button" onClick={addItem}>
+                  <Plus size={19} /> Ajouter un élément
                 </button>
-                <div className="page-footer">
-                  <span>
-                    {snapshot.participants.length} participant
-                    {snapshot.participants.length > 1 ? "s" : ""} ·{" "}
-                    {snapshot.contributions.length} apport
-                    {snapshot.contributions.length > 1 ? "s" : ""}
-                  </span>
-                  {!session.admin && <a href="/admin">Administration</a>}
-                </div>
               </>
             )}
           </main>
@@ -997,6 +980,7 @@ function App() {
       )}
       {modal && (
         <Modal
+          key={modal.kind}
           title={
             modal.kind === "identity"
               ? "Votre prénom"
@@ -1018,10 +1002,84 @@ function App() {
                         ? "Vos repas"
                         : modal.kind === "share"
                           ? "Partager le repas"
-                          : modal.title
+                          : modal.kind === "options"
+                            ? "Repas"
+                            : modal.kind === "info"
+                              ? "Informations"
+                              : modal.title
           }
           onClose={() => !submitting && setModal(null)}
         >
+          {modal.kind === "options" && (
+            <div className="options-list">
+              <button
+                aria-label="Modifier mon prénom"
+                onClick={() => setModal({ kind: "identity" })}
+              >
+                <Users size={18} />
+                <span>{session?.actor || "Mon prénom"}</span>
+                <ChevronRight size={16} />
+              </button>
+              <button
+                onClick={() => {
+                  setModal(null);
+                  void copyLink();
+                }}
+              >
+                <Link2 size={18} />
+                <span>Partager</span>
+              </button>
+              <button onClick={() => setModal({ kind: "info" })}>
+                <CalendarDays size={18} />
+                <span>Informations</span>
+              </button>
+              <button onClick={() => setModal({ kind: "activity" })}>
+                <History size={18} />
+                <span>Historique</span>
+              </button>
+              {session?.admin ? (
+                <>
+                  <button
+                    aria-label="Modifier le repas"
+                    onClick={() => setModal({ kind: "event", event })}
+                  >
+                    <Settings2 size={18} />
+                    <span>Modifier le repas</span>
+                  </button>
+                  <button
+                    aria-label="Choisir un repas"
+                    onClick={() => setModal({ kind: "navigation" })}
+                  >
+                    <Menu size={18} />
+                    <span>Autres repas</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setModal(null);
+                      void signOut();
+                    }}
+                  >
+                    <LogOut size={18} />
+                    <span>Déconnexion</span>
+                  </button>
+                </>
+              ) : (
+                <a href="/admin">
+                  <ShieldCheck size={18} />
+                  <span>Administration</span>
+                </a>
+              )}
+            </div>
+          )}
+          {modal.kind === "info" && event && (
+            <div className="event-info">
+              <p>
+                {formatDate(event.date)} · {timeOf(event.date)}
+              </p>
+              {event.location && <p>{event.location}</p>}
+              {event.description && <p>{event.description}</p>}
+            </div>
+          )}
           {modal.kind === "identity" && (
             <IdentityForm
               initial={session?.actor || ""}

@@ -35,7 +35,9 @@ docker run --rm --user "$(id -u):$(id -g)" \
   --workdir /app node:24-bookworm-slim node scripts/setup.mjs
 ```
 
-Créez ensuite un repas, ajoutez les ingrédients et le matériel, puis utilisez **Partager** pour envoyer son lien aux participants. Sur un téléphone du même réseau, utilisez l'adresse IP de l'hôte à la place de `localhost`, par exemple `http://192.168.1.20:3000`.
+Créez ensuite un repas, ajoutez les ingrédients et le matériel, puis ouvrez **⋯ → Partager** pour envoyer son lien aux participants. Sur un téléphone du même réseau, utilisez l'adresse IP de l'hôte à la place de `localhost`, par exemple `http://192.168.1.20:3000`.
+
+Le repas s’affiche comme une liste de courses : le **+** d’une ligne ajoute un apport ; toucher la ligne affiche les apports individuels et permet de les modifier. **Ajouter un élément**, en fin de liste, crée un nouvel ingrédient ou matériel. Le menu **⋯** donne accès au prénom, au partage, à l’historique et aux actions d’administration.
 
 ### Configuration
 
