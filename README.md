@@ -26,7 +26,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Compose est configuré pour télécharger **`ghcr.io/onefrenchleft/dumbfood:latest`**, sans compiler l'application sur votre machine. Le package doit avoir été publié par GitHub Actions et être accessible à votre compte ou au public.
+Compose télécharge l’image publique **`ghcr.io/onefrenchleft/dumbfood:latest`**, publiée par GitHub Actions pour Linux `amd64` et `arm64`. Aucune compilation locale ni connexion à GHCR n’est nécessaire.
 
 Ouvrez **http://localhost:2212/admin**. Le script crée un `.env` privé contenant un mot de passe administrateur aléatoire dans `ADMIN_PASSWORD` et une clé de session dans `SESSION_SECRET`. Consultez ce fichier localement pour vous connecter ; il est exclu de Git et de l'image Docker. Le script refuse d'écraser une configuration existante.
 
@@ -119,7 +119,7 @@ docker compose -f compose.yaml -f compose.build.yaml up -d --build
 
 Le workflow GitHub Actions exécute les tests, compile l'application, puis publie l'image sur GitHub Container Registry lors d'un push sur `main`, d'un tag `v*` ou d'un lancement manuel. Les images ciblent Linux `amd64` et `arm64`. Sur `main`, le tag `latest` suit la dernière publication ; chaque publication reçoit aussi un tag `sha-<commit-court>`. Un tag Git `v1.2.3` produit les tags d'image `1.2.3` et `1.2`. Définissez `DUMBFOOD_IMAGE` pour fixer une version précise.
 
-Lors de sa première publication, un nouveau package GHCR est privé par défaut. Pour autoriser les téléchargements sans connexion, le propriétaire doit ouvrir les paramètres du package `dumbfood`, puis **Package settings → Change visibility → Public**. Si le package reste privé, connectez Docker avec un jeton GitHub ayant le droit `read:packages` avant `docker compose pull`.
+L’image officielle est publique et son démarrage est vérifié automatiquement avec Compose sur le port `2212` après chaque publication.
 
 ## Développement
 
