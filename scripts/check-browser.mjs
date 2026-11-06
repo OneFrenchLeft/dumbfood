@@ -53,33 +53,26 @@ try {
   const page = await admin.newPage();
   page.on("pageerror", (x) => errors.push(x.message));
   await page.goto(base + "/admin");
-  await page.getByLabel("Mot de passe administrateur").fill(password);
-  await page.getByRole("button", { name: "Ouvrir mon espace" }).click();
-  await page.getByRole("button", { name: "Créer mon premier repas" }).click();
-  await page.getByLabel("Nom du repas").fill("Repas de vérification");
-  await page.getByLabel("Date et heure").fill("2026-11-21T19:30");
-  await page
-    .getByLabel("Où se retrouve-t-on ?", { exact: false })
-    .fill("Chez Anne");
-  await page
-    .getByRole("button", { name: "Créer le repas", exact: true })
-    .click();
+  await page.locator("#admin-password").fill(password);
+  await page.getByRole("button", { name: "Se connecter", exact: true }).click();
+  await page.getByRole("main").getByRole("button", { name: "Nouveau repas", exact: true }).click();
+  await page.locator("#event-title").fill("Repas de vérification");
+  await page.locator("#event-date").fill("2026-11-21T19:30");
+  await page.locator("#event-location").fill("Chez Anne");
+  await page.getByRole("dialog").getByRole("button", { name: "Créer", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Repas de vérification", exact: true }),
   ).toBeVisible();
   const url = page.url();
-  await page
-    .getByRole("button", { name: "Ajouter autre chose", exact: true })
-    .filter({ visible: true })
-    .click();
-  await page.getByLabel("Qu’est-ce qu’on apporte ?").fill("Fromage");
+  await page.locator(".add-item-end").click();
+  await page.locator("#item-name").fill("Fromage");
   await page.getByLabel("Définir un objectif", { exact: false }).check();
   await page
     .getByRole("spinbutton", { name: "Objectif", exact: true })
     .fill("2400");
-  await page.getByLabel("Premier apport", { exact: false }).fill("1200");
-  await page.getByLabel("Prénom de la personne").fill("Anne");
-  await page.getByRole("button", { name: "Ajouter à la liste" }).click();
+  await page.locator("#item-first-quantity").fill("1200");
+  await page.locator("#contribution-name").fill("Anne");
+  await page.getByRole("dialog").getByRole("button", { name: "Ajouter", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Fromage", exact: true }),
   ).toBeVisible();
@@ -115,31 +108,26 @@ try {
       exact: true,
     })
     .click();
-  await phone.getByLabel("Votre prénom", { exact: true }).fill("Thomas");
-  await phone.getByRole("button", { name: "C’est parti", exact: true }).click();
-  await phone.getByLabel("Quelle quantité ?").fill("2640");
-  await phone
-    .getByRole("button", { name: "Enregistrer cet apport", exact: true })
-    .click();
+  await phone.locator("#identity-name").fill("Thomas");
+  await phone.getByRole("dialog").getByRole("button", { name: "Continuer", exact: true }).click();
+  await phone.locator("#contribution-quantity").fill("2640");
+  await phone.getByRole("dialog").getByRole("button", { name: "Enregistrer", exact: true }).click();
   await expect(page.locator(".item-card").first()).toContainText("110 %");
   await expect(phone.locator(".item-card").first()).toContainText("110 %");
-  await phone
-    .getByRole("button", { name: "Ajouter autre chose", exact: true })
-    .filter({ visible: true })
-    .click();
-  await phone.getByLabel("Qu’est-ce qu’on apporte ?").fill("Pain");
-  await phone.getByLabel("Unité", { exact: true }).selectOption("piece");
-  await phone.getByLabel("Premier apport", { exact: false }).fill("2");
+  await phone.locator(".add-item-end").click();
+  await phone.locator("#item-name").fill("Pain");
+  await phone.locator("#item-unit").selectOption("piece");
+  await phone.locator("#item-first-quantity").fill("2");
   await expect(
     phone.getByLabel("Définir un objectif", { exact: false }),
   ).toHaveCount(0);
-  await phone.getByLabel("Qui apporte ?").selectOption({ label: "Anne" });
-  await phone.getByRole("button", { name: "Ajouter à la liste" }).click();
+  await phone.locator("#contribution-person").selectOption({ label: "Anne" });
+  await phone.getByRole("dialog").getByRole("button", { name: "Ajouter", exact: true }).click();
   const bread = page
     .locator(".item-card")
     .filter({ has: page.getByRole("heading", { name: "Pain", exact: true }) });
   await expect(bread).toBeVisible();
-  await expect(bread).toContainText("En libre");
+  await expect(bread.locator(".free-badge")).toHaveText("Libre");
   await expect(bread.getByRole("progressbar")).toHaveCount(0);
   await page
     .getByRole("button", { name: "Modifier Pain", exact: true })
@@ -148,14 +136,12 @@ try {
   await page
     .getByRole("spinbutton", { name: "Objectif", exact: true })
     .fill("3");
-  await page
-    .getByRole("button", { name: "Enregistrer les modifications", exact: true })
-    .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Enregistrer", exact: true }).click();
   const phoneBread = phone
     .locator(".item-card")
     .filter({ has: phone.getByRole("heading", { name: "Pain", exact: true }) });
   await expect(phoneBread).toContainText("67 %");
-  await phone.getByRole("tab", { name: "Par personne", exact: false }).click();
+  await phone.getByRole("tab", { name: "Personnes", exact: true }).click();
   await expect(
     phone
       .locator(".person-card")
@@ -164,7 +150,7 @@ try {
       }),
   ).toContainText("Pain");
   await phone
-    .getByRole("tab", { name: "Ce qu’il manque", exact: false })
+    .getByRole("tab", { name: "Manquants", exact: false })
     .click();
   await expect(
     phone.getByRole("heading", { name: "Fromage", exact: true }),
@@ -186,10 +172,8 @@ try {
   await page
     .getByRole("button", { name: "Modifier le repas", exact: true })
     .click();
-  await page.getByLabel("Nom du repas").fill("Repas renommé");
-  await page
-    .getByRole("button", { name: "Enregistrer le repas", exact: true })
-    .click();
+  await page.locator("#event-title").fill("Repas renommé");
+  await page.getByRole("dialog").getByRole("button", { name: "Enregistrer", exact: true }).click();
   await expect(
     phone.getByRole("heading", { name: "Repas renommé", exact: true }),
   ).toBeVisible();
@@ -201,14 +185,14 @@ try {
     .click();
   await page.getByRole("button", { name: "Supprimer", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Créer mon premier repas", exact: true }),
+    page.getByRole("main").getByRole("button", { name: "Nouveau repas", exact: true }),
   ).toBeVisible();
   const list = await admin.request.get(base + "/api/events");
   if ((await list.json()).length !== 0)
     throw new Error("Le repas supprimé subsiste");
   await expect(
     phone.getByRole("heading", {
-      name: "Le repas est introuvable.",
+      name: "Repas introuvable",
       exact: true,
     }),
   ).toBeVisible();
@@ -221,11 +205,9 @@ try {
       .getByRole("dialog")
       .getByRole("button", { name: "Nouveau repas", exact: true })
       .click();
-    await page.getByLabel("Nom du repas").fill(title);
-    await page.getByLabel("Date et heure").fill("2026-12-05T20:00");
-    await page
-      .getByRole("button", { name: "Créer le repas", exact: true })
-      .click();
+    await page.locator("#event-title").fill(title);
+    await page.locator("#event-date").fill("2026-12-05T20:00");
+    await page.getByRole("dialog").getByRole("button", { name: "Créer", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: title, exact: true }),
     ).toBeVisible();
@@ -245,7 +227,7 @@ try {
     .click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Déconnexion admin", exact: true })
+    .getByRole("button", { name: "Déconnexion", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Modifier le repas", exact: true }),

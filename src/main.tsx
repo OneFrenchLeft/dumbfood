@@ -1,23 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  ArrowDownLeft,
   ArrowRight,
-  ArrowUpRight,
   CalendarDays,
   Check,
-  CheckCheck,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   CircleHelp,
-  Clock3,
   CookingPot,
   Copy,
-  Heart,
   History,
-  LayoutGrid,
-  Leaf,
   Link2,
   LoaderCircle,
   LogOut,
@@ -27,13 +20,7 @@ import {
   Plus,
   Search,
   Settings2,
-  ShieldCheck,
-  Sparkles,
   Trash2,
-  Users,
-  Utensils,
-  UtensilsCrossed,
-  Wine,
   X,
 } from "lucide-react";
 import type {
@@ -363,7 +350,7 @@ function App() {
   };
   const execute = async (
     operation: () => Promise<unknown>,
-    message = "Enregistré, tout le monde est à jour.",
+    message = "Enregistré.",
   ) => {
     setSubmitting(true);
     try {
@@ -448,7 +435,7 @@ function App() {
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(shareLink);
-      notify("Lien copié. À partager avec la tablée !");
+      notify("Lien copié.");
     } catch {
       setModal({ kind: "share" });
     }
@@ -459,179 +446,112 @@ function App() {
       onClick={() => setModal({ kind: "identity" })}
       aria-label="Modifier mon prénom"
     >
-      <Avatar name={session?.actor || (session?.admin ? "Admin" : "?")} small />
-      <span>
-        {session?.actor || (session?.admin ? "Admin" : "Votre prénom")}
-        <small>{session?.admin ? "Administrateur" : "Invité du repas"}</small>
-      </span>
-      <ChevronDown size={14} />
+      <span>{session?.actor || (session?.admin ? "Admin" : "Mon prénom")}</span>
+      <ChevronDown size={15} />
     </button>
   );
 
   return (
     <>
-      <div className="app-shell">
-        <aside className="sidebar">
-          <a
-            className="brand"
-            href={session?.admin ? "/admin" : "/"}
-            aria-label="dumbfood accueil"
-          >
-            <span className="brand-icon">
-              <UtensilsCrossed size={20} strokeWidth={2.3} />
-            </span>
-            dumbfood<span className="brand-dot">.</span>
-          </a>
-          <div className="sidebar-title">ON SE RETROUVE À TABLE</div>
-          <div className="sidebar-section-label">
-            {session?.admin ? "MES REPAS" : "AU MENU"}
-          </div>
-          {session?.admin ? (
-            <>
-              <div className="event-nav">
-                {visibleEvents.map((e) => (
-                  <button
-                    key={e.id}
-                    className={`event-nav-button ${token === e.shareToken ? "selected" : ""}`}
-                    onClick={() => selectEvent(e.shareToken)}
-                  >
-                    <span className="event-nav-icon">
-                      <CookingPot size={19} />
-                    </span>
-                    <span>
-                      {e.title}
-                      <small>
-                        {formatDate(e.date, { day: "numeric", month: "short" })}
-                        {e.archived ? " · Archivé" : ""}
-                      </small>
-                    </span>
-                    {token === e.shareToken && (
-                      <span className="nav-active-dot" />
-                    )}
-                  </button>
-                ))}
-              </div>
-              <button
-                className="sidebar-add"
-                onClick={() => setModal({ kind: "event" })}
-              >
-                <Plus size={17} /> Nouveau repas
-              </button>
-              {events.some((e) => e.archived) && (
+      <div className={`app-shell ${session?.admin ? "" : "guest-layout"}`}>
+        {session?.admin && (
+          <aside className="sidebar">
+            <a className="brand" href="/admin" aria-label="dumbfood accueil">
+              dumbfood
+            </a>
+            <div className="sidebar-section-label">Repas</div>
+            <nav className="event-nav" aria-label="Mes repas">
+              {visibleEvents.map((e) => (
                 <button
-                  className="text-button archived-toggle"
-                  onClick={() => setShowArchived(!showArchived)}
+                  key={e.id}
+                  className={`event-nav-button ${token === e.shareToken ? "selected" : ""}`}
+                  onClick={() => selectEvent(e.shareToken)}
                 >
-                  {showArchived ? "Masquer les archives" : "Voir les archives"}
+                  <span>
+                    {e.title}
+                    <small>
+                      {formatDate(e.date, { day: "numeric", month: "short" })}
+                      {e.archived ? " · Archivé" : ""}
+                    </small>
+                  </span>
                 </button>
-              )}
-            </>
-          ) : event ? (
-            <button className="event-nav-button selected">
-              <span className="event-nav-icon">
-                <CookingPot size={19} />
-              </span>
-              <span>
-                {event.title}
-                <small>
-                  {formatDate(event.date, { day: "numeric", month: "short" })}
-                </small>
-              </span>
-              <span className="nav-active-dot" />
+              ))}
+            </nav>
+            <button
+              className="sidebar-add"
+              onClick={() => setModal({ kind: "event" })}
+            >
+              <Plus size={17} /> Nouveau repas
             </button>
-          ) : (
-            <div className="sidebar-hint">
-              Les bons repas commencent par un lien partagé.
-            </div>
-          )}
-          <div className="sidebar-note">
-            <div className="note-illustration">
-              <Heart size={22} />
-              <span>✦</span>
-            </div>
-            <strong>Chacun apporte sa part.</strong>
-            <p>
-              Moins d’organisation,
-              <br />
-              plus de bons moments.
-            </p>
-          </div>
-          <div className="sidebar-bottom">
-            {session?.admin ? (
-              <button className="sidebar-utility" onClick={signOut}>
-                <LogOut size={17} /> Déconnexion admin
+            {events.some((e) => e.archived) && (
+              <button
+                className="text-button archived-toggle"
+                onClick={() => setShowArchived(!showArchived)}
+              >
+                {showArchived ? "Masquer les archives" : "Voir les archives"}
               </button>
-            ) : (
-              <a className="sidebar-utility" href="/admin">
-                <ShieldCheck size={17} /> Espace organisateur
-              </a>
             )}
-            <span className="made-for">
-              Fait pour les grandes tablées <Heart size={11} />
-            </span>
-          </div>
-        </aside>
+            <div className="sidebar-bottom">
+              <button className="sidebar-utility" onClick={signOut}>
+                <LogOut size={17} /> Déconnexion
+              </button>
+            </div>
+          </aside>
+        )}
         <div className="main-column">
           <header className="topbar">
-            <div className="breadcrumb">
-              <Utensils size={15} />
-              <span>Mes repas</span>
-              <ChevronRight size={13} />
-              <strong>
-                {event?.title ||
-                  (isAdminPage ? "Administration" : "Bienvenue à table")}
-              </strong>
-            </div>
             <div className="mobile-brand-group">
-              <a href="/" className="mobile-brand">
-                dumbfood<span>.</span>
-              </a>
               {session?.admin && (
                 <button
-                  className="mobile-admin-menu"
+                  className="mobile-admin-menu icon-button"
                   aria-label="Choisir un repas"
                   onClick={() => setModal({ kind: "navigation" })}
                 >
-                  <Menu size={19} />
+                  <Menu size={20} />
                 </button>
               )}
+              <a
+                href={session?.admin ? "/admin" : "/"}
+                className="mobile-brand"
+              >
+                dumbfood
+              </a>
             </div>
+            {session?.admin && <span className="topbar-label">Mes repas</span>}
             <div className="topbar-actions">
               {token && (
-                <span className={`connection ${connection}`} role="status">
+                <span
+                  className={`connection ${connection}`}
+                  role="status"
+                  aria-label={
+                    connection === "live"
+                      ? "Synchronisé en direct"
+                      : "Reconnexion en cours"
+                  }
+                >
                   <span />
-                  {connection === "live"
-                    ? "En direct"
-                    : connection === "connecting"
-                      ? "Connexion…"
-                      : "Reconnexion…"}
+                  {connection === "live" ? "En direct" : "Reconnexion…"}
                 </span>
               )}
               {identityButton}
+              {!session?.admin && !token && (
+                <a href="/admin" className="text-button">
+                  Administration
+                </a>
+              )}
             </div>
           </header>
           <main>
             {session === null ? (
               <div className="page-state">
                 <LoaderCircle className="spin" />
-                <p>On prépare la table…</p>
+                <p>Chargement…</p>
               </div>
             ) : isAdminPage && !session.admin ? (
               <div className="welcome-wrap">
-                <div className="welcome-art">
-                  <UtensilsCrossed size={36} />
-                </div>
-                <span className="eyebrow">LE COIN DE L’ORGANISATEUR</span>
-                <h1>Bienvenue en cuisine.</h1>
-                <p>
-                  Connectez-vous pour organiser vos repas
-                  <br />
-                  et préparer de belles tablées.
-                </p>
+                <h1>Administration</h1>
                 <form className="login-form" onSubmit={signIn}>
-                  <label htmlFor="admin-password">
-                    Mot de passe administrateur
-                  </label>
+                  <label htmlFor="admin-password">Mot de passe</label>
                   <input
                     id="admin-password"
                     type="password"
@@ -640,7 +560,6 @@ function App() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoFocus
-                    placeholder="Votre mot de passe"
                   />
                   {loginError && (
                     <p className="field-error" role="alert">
@@ -648,56 +567,33 @@ function App() {
                     </p>
                   )}
                   <button className="button primary" disabled={loginBusy}>
-                    {loginBusy ? (
-                      <LoaderCircle size={17} className="spin" />
-                    ) : (
-                      <ArrowRight size={17} />
-                    )}{" "}
-                    Ouvrir mon espace
+                    {loginBusy && <LoaderCircle size={17} className="spin" />}Se
+                    connecter
                   </button>
                 </form>
               </div>
             ) : !token ? (
               <div className="welcome-wrap">
-                <div className="welcome-art">
-                  <CookingPot size={38} />
-                </div>
-                <span className="eyebrow">À CHACUN SA PART</span>
-                <h1>
-                  Les bons repas
-                  <br />
-                  se préparent ensemble.
-                </h1>
-                <p>
-                  {session.admin
-                    ? "Votre prochaine tablée n’attend que vous."
-                    : "Ouvrez le lien de votre repas pour voir ce qu’il manque et ajouter ce que vous apportez."}
-                </p>
+                <h1>{session.admin ? "Aucun repas" : "dumbfood"}</h1>
                 {session.admin ? (
                   <button
                     className="button primary"
                     onClick={() => setModal({ kind: "event" })}
                   >
-                    <Plus size={18} /> Créer mon premier repas
+                    <Plus size={18} /> Nouveau repas
                   </button>
                 ) : (
-                  <a className="button primary" href="/admin">
-                    <ShieldCheck size={18} /> Organiser un repas
-                  </a>
+                  <>
+                    <p>Ouvrez le lien partagé par l’organisateur.</p>
+                    <a className="button secondary" href="/admin">
+                      Administration
+                    </a>
+                  </>
                 )}
-                <div className="welcome-pills">
-                  <span>
-                    <CheckCheck size={16} /> Quantités partagées
-                  </span>
-                  <span>
-                    <Users size={16} /> Sans compte invité
-                  </span>
-                </div>
               </div>
             ) : pageError ? (
               <div className="page-state">
-                <CookingPot size={34} />
-                <h1>Le repas est introuvable.</h1>
+                <h1>Repas introuvable</h1>
                 <p>{pageError}</p>
                 <button
                   className="button secondary"
@@ -712,182 +608,97 @@ function App() {
                   Réessayer
                 </button>
                 <a href="/admin" className="text-button">
-                  Espace organisateur
+                  Administration
                 </a>
               </div>
             ) : loading || !snapshot ? (
               <div className="page-state">
                 <LoaderCircle className="spin" />
-                <p>On dresse la table…</p>
+                <p>Chargement…</p>
               </div>
             ) : (
               <>
-                <div className="page-heading">
-                  <div>
-                    <div className="eyebrow">
-                      <span className="tiny-star">✦</span> LE PROCHAIN BON
-                      MOMENT
-                    </div>
-                    <h1>{event!.title}</h1>
-                  </div>
+                <div className="event-heading">
+                  <h1>{event!.title}</h1>
                   <div className="heading-actions">
                     {session.admin && (
                       <button
-                        className="button icon-button secondary"
+                        className="icon-button"
                         onClick={() => setModal({ kind: "event", event })}
                         aria-label="Modifier le repas"
+                        title="Modifier le repas"
                       >
-                        <Settings2 size={18} />
+                        <Settings2 size={19} />
                       </button>
                     )}
                     <button
                       className="button secondary share-button"
                       onClick={copyLink}
+                      aria-label="Partager le repas"
                     >
                       <Link2 size={17} />
-                      <span>Inviter la tablée</span>
+                      <span>Partager</span>
                     </button>
                   </div>
                 </div>
-                <section
-                  className="meal-banner"
-                  aria-label="Informations du repas"
-                >
-                  <div className="banner-content">
-                    <span className="banner-tag">
-                      <CookingPot size={14} />{" "}
-                      {event!.archived
-                        ? "Repas archivé"
-                        : "LE REPAS SE PRÉPARE"}
+                <div className="event-meta">
+                  <span>
+                    <CalendarDays size={15} />
+                    {formatDate(event!.date)} · {timeOf(event!.date)}
+                  </span>
+                  {event!.location && (
+                    <span>
+                      <MapPin size={15} />
+                      {event!.location}
                     </span>
-                    <p>
-                      {event!.description ||
-                        "Une grande table, de bonnes choses et vous."}
-                    </p>
-                    <div className="meal-meta">
-                      <span>
-                        <CalendarDays size={16} />
-                        {formatDate(event!.date)}
-                        <span className="meta-separator">·</span>
-                        {timeOf(event!.date)}
-                      </span>
-                      {event!.location && (
+                  )}
+                  {event!.archived && <span>Archivé</span>}
+                </div>
+                {event!.description && (
+                  <details className="event-description">
+                    <summary>Détails</summary>
+                    <p>{event!.description}</p>
+                  </details>
+                )}
+                <div className="overview-row">
+                  <div className="overview" aria-label="Résumé des apports">
+                    {targeted.length ? (
+                      <>
                         <span>
-                          <MapPin size={16} />
-                          {event!.location}
+                          <strong>
+                            {covered}/{targeted.length}
+                          </strong>{" "}
+                          prêts
                         </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="plate-art" aria-hidden="true">
-                    <span className="plate-orbit orbit-one" />
-                    <span className="plate-orbit orbit-two" />
-                    <span className="plate">
+                        {freeCount > 0 && (
+                          <>
+                            <span className="summary-divider">·</span>
+                            <span>
+                              {freeCount} libre{freeCount > 1 ? "s" : ""}
+                            </span>
+                          </>
+                        )}
+                      </>
+                    ) : (
                       <span>
-                        <UtensilsCrossed size={44} strokeWidth={1.3} />
+                        {snapshot.items.length
+                          ? `${snapshot.items.length} élément${snapshot.items.length > 1 ? "s" : ""} libre${snapshot.items.length > 1 ? "s" : ""}`
+                          : "Aucun élément"}
                       </span>
-                    </span>
-                    <span className="plate-spark spark-one">✦</span>
-                    <span className="plate-spark spark-two">✦</span>
-                    <span className="plate-leaf">
-                      <Leaf size={28} strokeWidth={1.5} />
-                    </span>
+                    )}
                   </div>
-                </section>
-                <details className="mobile-meal-info">
-                  <summary aria-label="Voir les détails du repas">
-                    <span className="mobile-meal-copy">
-                      <span>
-                        <CalendarDays size={16} />
-                        {formatDate(event!.date)} · {timeOf(event!.date)}
-                      </span>
-                      {event!.location && (
-                        <span>
-                          <MapPin size={14} />
-                          {event!.location}
-                        </span>
-                      )}
-                      {event!.archived && <span>Repas archivé</span>}
-                    </span>
-                    <ChevronDown size={17} />
-                  </summary>
-                  <p>
-                    {event!.description ||
-                      "Une grande table, de bonnes choses et vous."}
-                  </p>
-                </details>
-                <section className="overview" aria-label="Résumé des apports">
-                  <div className="overview-main">
-                    <div className="summary-icon">
-                      <CheckCheck size={22} />
-                    </div>
-                    <div>
-                      <strong>
-                        {covered}
-                        <span> / {targeted.length}</span>
-                      </strong>
-                      <span className="summary-label">besoins couverts</span>
-                    </div>
-                    <div className="mini-meter" aria-hidden="true">
-                      {Array.from(
-                        { length: Math.min(targeted.length || 6, 12) },
-                        (_, i) => (
-                          <span
-                            key={i}
-                            className={i < covered ? "filled" : ""}
-                          />
-                        ),
-                      )}
-                    </div>
+                  <div className="list-toolbar">
+                    <button className="button secondary" onClick={addItem}>
+                      <Plus size={17} /> Ajouter
+                    </button>
                   </div>
-                  <div className="overview-separator" />
-                  <div className="overview-free">
-                    <span className="soft-icon">
-                      <Sparkles size={20} />
-                    </span>
-                    <div>
-                      <strong>{freeCount}</strong>
-                      <span className="summary-label">
-                        {freeCount > 1
-                          ? "extras à partager"
-                          : "extra à partager"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="overview-people">
-                    <div className="avatar-stack">
-                      {snapshot.participants.slice(0, 4).map((p) => (
-                        <Avatar key={p.id} name={p.name} small />
-                      ))}
-                    </div>
-                    <div>
-                      <strong>
-                        {snapshot.participants.length} à la tablée
-                      </strong>
-                      <span className="summary-label">
-                        {snapshot.contributions.length} apports prévus
-                      </span>
-                    </div>
-                  </div>
-                </section>
+                </div>
                 {connection === "offline" && (
                   <div className="offline-notice" role="status">
-                    La connexion est interrompue. Les données affichées peuvent
-                    avoir changé ; nous essayons de reconnecter le repas.
+                    Connexion interrompue. Les données seront actualisées à la
+                    reconnexion.
                   </div>
                 )}
-                <div className="list-heading">
-                  <div>
-                    <h2>Qui apporte quoi ?</h2>
-                    <p>Un peu de chacun, beaucoup à partager.</p>
-                  </div>
-                  <button
-                    className="button primary add-item-desktop"
-                    onClick={addItem}
-                  >
-                    <Plus size={17} /> Ajouter autre chose
-                  </button>
-                </div>
                 <div className="tabs-toolbar">
                   <div
                     className="view-tabs"
@@ -900,7 +711,7 @@ function App() {
                       className={tab === "items" ? "active" : ""}
                       onClick={() => setTab("items")}
                     >
-                      <LayoutGrid size={16} /> À apporter
+                      Liste
                     </button>
                     <button
                       role="tab"
@@ -908,7 +719,7 @@ function App() {
                       className={tab === "people" ? "active" : ""}
                       onClick={() => setTab("people")}
                     >
-                      <Users size={16} /> Par personne
+                      Personnes
                     </button>
                     <button
                       role="tab"
@@ -916,16 +727,17 @@ function App() {
                       className={tab === "missing" ? "active" : ""}
                       onClick={() => setTab("missing")}
                     >
-                      <span className="tab-icon-dot" /> Ce qu’il manque{" "}
+                      Manquants{" "}
                       <span className="tab-count">{totalMissing}</span>
                     </button>
                   </div>
                   <button
-                    className="history-button"
+                    className="history-button icon-button"
                     onClick={() => setModal({ kind: "activity" })}
+                    aria-label="Historique"
+                    title="Historique"
                   >
-                    <History size={16} />
-                    <span>Activité</span>
+                    <History size={19} />
                   </button>
                 </div>
                 {tab !== "people" ? (
@@ -936,7 +748,7 @@ function App() {
                           className={category === "all" ? "selected" : ""}
                           onClick={() => setCategory("all")}
                         >
-                          Tout <span>{snapshot.items.length}</span>
+                          Tout
                         </button>
                         <button
                           className={
@@ -944,26 +756,24 @@ function App() {
                           }
                           onClick={() => setCategory("ingredient")}
                         >
-                          <Leaf size={14} /> Ingrédients
+                          Ingrédients
                         </button>
                         <button
                           className={category === "equipment" ? "selected" : ""}
                           onClick={() => setCategory("equipment")}
                         >
-                          <CookingPot size={14} /> Matériel
+                          Matériel
                         </button>
                       </div>
-                      <label className="search-field" htmlFor="item-search">
-                        <Search size={16} />
+                      <div className="search-field">
+                        <Search size={17} />
                         <input
-                          id="item-search"
-                          type="search"
                           aria-label="Rechercher un élément"
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
-                          placeholder="Rechercher…"
+                          placeholder="Rechercher"
                         />
-                      </label>
+                      </div>
                     </div>
                     <div className="item-grid">
                       {filteredItems.map((item) => {
@@ -982,46 +792,26 @@ function App() {
                             className={`item-card ${complete ? "complete" : ""}`}
                           >
                             <div className="card-top">
-                              <span
-                                className={`item-symbol ${item.category === "equipment" ? "equipment" : ""}`}
-                              >
-                                {item.category === "equipment" ? (
-                                  <CookingPot size={21} />
-                                ) : item.unit === "L" ? (
-                                  <Wine size={21} />
-                                ) : (
-                                  <Leaf size={21} />
-                                )}
-                              </span>
-                              <div className="item-title">
-                                <h3>{item.name}</h3>
-                                <span>
-                                  {item.category === "equipment"
-                                    ? "Matériel"
-                                    : "Ingrédient"}
-                                </span>
-                              </div>
+                              <h3>{item.name}</h3>
                               {session.admin && (
                                 <button
-                                  className="card-menu"
+                                  className="card-menu icon-button"
                                   aria-label={`Modifier ${item.name}`}
                                   onClick={() =>
                                     setModal({ kind: "item", item })
                                   }
                                 >
-                                  <MoreHorizontal size={21} />
+                                  <MoreHorizontal size={20} />
                                 </button>
-                              )}
-                              {!session.admin && complete && (
-                                <CheckCircle2
-                                  size={20}
-                                  className="card-complete-icon"
-                                />
                               )}
                             </div>
                             <div className="quantity-row">
                               <div>
-                                <strong>{amount(total, item.unit)}</strong>
+                                <strong>
+                                  {item.target !== null
+                                    ? number(total)
+                                    : amount(total, item.unit)}
+                                </strong>
                                 {item.target !== null && (
                                   <span>
                                     {" "}
@@ -1033,15 +823,13 @@ function App() {
                                 <span
                                   className={`percent ${complete ? "done" : ""}`}
                                 >
-                                  {complete && <Check size={12} />} {percent} %
+                                  {percent} %
                                 </span>
                               ) : (
-                                <span className="free-badge">
-                                  <Sparkles size={11} /> En libre
-                                </span>
+                                <span className="free-badge">Libre</span>
                               )}
                             </div>
-                            {item.target !== null ? (
+                            {item.target !== null && (
                               <>
                                 <div
                                   className="progress-track"
@@ -1058,36 +846,14 @@ function App() {
                                     }}
                                   />
                                 </div>
-                                <div
-                                  className={`progress-caption ${complete ? "done" : ""}`}
-                                >
-                                  {total > item.target ? (
-                                    <>
-                                      <Check size={12} />
-                                      {amount(
-                                        total - item.target,
-                                        item.unit,
-                                      )}{" "}
-                                      en plus, c’est généreux !
-                                    </>
-                                  ) : total === item.target ? (
-                                    <>
-                                      <Check size={12} />
-                                      Tout est prévu, parfait !
-                                    </>
-                                  ) : (
-                                    <>
-                                      Encore{" "}
-                                      {amount(item.target - total, item.unit)} à
-                                      prévoir
-                                    </>
-                                  )}
+                                <div className="progress-caption">
+                                  {total < item.target
+                                    ? `Reste ${amount(item.target - total, item.unit)}`
+                                    : total > item.target
+                                      ? `+ ${amount(total - item.target, item.unit)}`
+                                      : "Complet"}
                                 </div>
                               </>
-                            ) : (
-                              <div className="free-caption">
-                                Les petits plus font les grands repas.
-                              </div>
                             )}
                             <div className="contributions-list">
                               {contributions.length ? (
@@ -1098,10 +864,6 @@ function App() {
                                     onClick={() => editContribution(item, c)}
                                     aria-label={`Modifier l’apport de ${participantName(c.participantId)} pour ${item.name}`}
                                   >
-                                    <Avatar
-                                      name={participantName(c.participantId)}
-                                      small
-                                    />
                                     <span>
                                       {participantName(c.participantId)}
                                       {c.note && <small>{c.note}</small>}
@@ -1111,15 +873,12 @@ function App() {
                                         ? `${number(c.quantity)} × ${number(c.capacity || 1)} places`
                                         : amount(c.quantity, item.unit)}
                                     </strong>
-                                    <ChevronRight size={13} />
+                                    <ChevronRight size={15} />
                                   </button>
                                 ))
                               ) : (
                                 <div className="no-contribution">
-                                  <span className="empty-avatar">
-                                    <Users size={14} />
-                                  </span>
-                                  La première part est pour vous ?
+                                  Aucun apport
                                 </div>
                               )}
                             </div>
@@ -1127,34 +886,26 @@ function App() {
                               className="card-add"
                               onClick={() => editContribution(item)}
                             >
-                              <Plus size={16} /> J’en apporte
+                              <Plus size={17} /> J’apporte
                             </button>
                           </article>
                         );
                       })}
                       {!filteredItems.length && (
                         <div className="empty-list">
-                          <CheckCircle2 size={31} />
                           <h3>
                             {tab === "missing" && !query
-                              ? "Tout est prévu !"
+                              ? "Tout est prévu"
                               : snapshot.items.length
-                                ? "Aucun élément trouvé"
-                                : "La table est encore vide"}
+                                ? "Aucun résultat"
+                                : "Aucun élément"}
                           </h3>
-                          <p>
-                            {tab === "missing" && !query
-                              ? "Il ne reste plus qu’à passer un bon moment."
-                              : snapshot.items.length
-                                ? "Essayez une autre recherche ou catégorie."
-                                : "Ajoutez les ingrédients, le matériel ou un petit extra."}
-                          </p>
                           {!snapshot.items.length && (
                             <button
-                              className="button primary"
+                              className="button secondary"
                               onClick={addItem}
                             >
-                              <Plus size={17} /> Ajouter le premier élément
+                              <Plus size={17} /> Ajouter un élément
                             </button>
                           )}
                         </div>
@@ -1170,14 +921,10 @@ function App() {
                       return (
                         <article className="person-card" key={person.id}>
                           <div className="person-heading">
-                            <Avatar name={person.name} />
-                            <div>
-                              <h3>{person.name}</h3>
-                              <span>
-                                {list.length} apport{list.length > 1 ? "s" : ""}{" "}
-                                prévu{list.length > 1 ? "s" : ""}
-                              </span>
-                            </div>
+                            <h3>{person.name}</h3>
+                            <span>
+                              {list.length} apport{list.length > 1 ? "s" : ""}
+                            </span>
                           </div>
                           {list.length ? (
                             list.map((c) => {
@@ -1196,39 +943,38 @@ function App() {
                                       ? `${number(c.quantity)} × ${number(c.capacity || 1)} places`
                                       : amount(c.quantity, item.unit)}
                                   </strong>
-                                  <ChevronRight size={14} />
+                                  <ChevronRight size={15} />
                                 </button>
                               ) : null;
                             })
                           ) : (
-                            <p className="person-empty">
-                              Sa part reste à choisir.
-                            </p>
+                            <p className="person-empty">Aucun apport</p>
                           )}
                         </article>
                       );
                     })}
                     {!snapshot.participants.length && (
                       <div className="empty-list">
-                        <Users size={30} />
-                        <h3>La tablée se construit</h3>
-                        <p>Ajoutez un premier apport pour commencer.</p>
+                        <h3>Aucun participant</h3>
                       </div>
                     )}
                   </div>
                 )}
+                <button
+                  className="button secondary add-item-end"
+                  onClick={addItem}
+                >
+                  <Plus size={17} /> Ajouter un élément
+                </button>
                 <div className="page-footer">
                   <span>
-                    <CheckCheck size={15} /> Les changements sont partagés en
-                    direct.
+                    {snapshot.participants.length} participant
+                    {snapshot.participants.length > 1 ? "s" : ""} ·{" "}
+                    {snapshot.contributions.length} apport
+                    {snapshot.contributions.length > 1 ? "s" : ""}
                   </span>
-                  <button onClick={() => setModal({ kind: "activity" })}>
-                    Voir l’activité <ArrowUpRight size={13} />
-                  </button>
+                  {!session.admin && <a href="/admin">Administration</a>}
                 </div>
-                <button className="button primary mobile-add" onClick={addItem}>
-                  <Plus size={18} /> Ajouter autre chose
-                </button>
               </>
             )}
           </main>
@@ -1253,25 +999,25 @@ function App() {
         <Modal
           title={
             modal.kind === "identity"
-              ? "On vous appelle comment ?"
+              ? "Votre prénom"
               : modal.kind === "event"
                 ? modal.event
-                  ? "Les détails du repas"
-                  : "Une nouvelle tablée"
+                  ? "Modifier le repas"
+                  : "Nouveau repas"
                 : modal.kind === "item"
                   ? modal.item
-                    ? "Modifier cet élément"
-                    : "Un petit quelque chose en plus"
+                    ? "Modifier l’élément"
+                    : "Nouvel élément"
                   : modal.kind === "contribution"
                     ? modal.contribution
-                      ? "Modifier cet apport"
-                      : "Je prends ma part"
+                      ? "Modifier un apport"
+                      : "Ajouter un apport"
                     : modal.kind === "activity"
-                      ? "La vie de la tablée"
+                      ? "Historique"
                       : modal.kind === "navigation"
                         ? "Vos repas"
                         : modal.kind === "share"
-                          ? "Inviter la tablée"
+                          ? "Partager le repas"
                           : modal.title
           }
           onClose={() => !submitting && setModal(null)}
@@ -1317,9 +1063,7 @@ function App() {
                       selectEvent(created.shareToken);
                     }
                   },
-                  modal.event
-                    ? "Les détails du repas sont à jour."
-                    : "Le repas est créé. À vous de dresser la liste !",
+                  modal.event ? "Repas enregistré." : "Repas créé.",
                 )
               }
               onArchive={
@@ -1335,8 +1079,8 @@ function App() {
                             }),
                           ),
                         modal.event!.archived
-                          ? "Le repas est de nouveau actif."
-                          : "Le repas est archivé.",
+                          ? "Repas réactivé."
+                          : "Repas archivé.",
                       )
                   : undefined
               }
@@ -1454,7 +1198,7 @@ function App() {
                   ? () =>
                       setModal({
                         kind: "confirm",
-                        title: "Retirer cet apport ?",
+                        title: "Retirer l’apport ?",
                         text: `L’apport de ${participantName(modal.contribution!.participantId)} sera retiré. L’élément « ${modal.item.name} » restera dans la liste.`,
                         action: () =>
                           api(
@@ -1469,9 +1213,6 @@ function App() {
           )}
           {modal.kind === "navigation" && (
             <div className="mobile-navigation">
-              <p className="modal-intro">
-                Retrouvez vos tablées et préparez le prochain repas.
-              </p>
               <div className="event-nav">
                 {visibleEvents.map((e) => (
                   <button
@@ -1519,15 +1260,12 @@ function App() {
                   signOut();
                 }}
               >
-                <LogOut size={16} /> Déconnexion admin
+                <LogOut size={16} /> Déconnexion
               </button>
             </div>
           )}
           {modal.kind === "activity" && (
             <div className="activity-list">
-              <p className="modal-intro">
-                Les dernières nouvelles, pour savoir qui a changé quoi.
-              </p>
               {snapshot?.activity.length ? (
                 snapshot.activity.map((a) => (
                   <div className="activity-entry" key={a.id}>
@@ -1549,7 +1287,7 @@ function App() {
               ) : (
                 <div className="empty-list">
                   <History size={27} />
-                  <p>Les premières contributions apparaîtront ici.</p>
+                  <p>Aucune modification.</p>
                 </div>
               )}
             </div>
@@ -1685,7 +1423,6 @@ function Modal({
         <div className="modal-handle" />
         <div className="modal-heading">
           <div>
-            <span className="eyebrow">ON PRÉPARE ÇA ENSEMBLE</span>
             <h2 id="modal-title">{title}</h2>
           </div>
           <button
@@ -1719,10 +1456,6 @@ function IdentityForm({
         if (name.trim()) onSubmit(name.trim());
       }}
     >
-      <p className="modal-intro">
-        Un prénom suffit pour participer. Vous pourrez aussi renseigner les
-        apports des autres.
-      </p>
       <label htmlFor="identity-name">Votre prénom</label>
       <input
         id="identity-name"
@@ -1734,9 +1467,6 @@ function IdentityForm({
         autoComplete="given-name"
         autoFocus
       />
-      <p className="field-hint">
-        Ce prénom signe vos modifications et reste mémorisé sur cet appareil.
-      </p>
       <button
         className="button primary full-width"
         disabled={busy || !name.trim()}
@@ -1746,7 +1476,7 @@ function IdentityForm({
         ) : (
           <ArrowRight size={17} />
         )}{" "}
-        C’est parti
+        Continuer
       </button>
     </form>
   );
@@ -1810,7 +1540,7 @@ function EventForm({
         required
       />
       <label htmlFor="event-location">
-        Où se retrouve-t-on ? <span>Facultatif</span>
+        Lieu <span>Facultatif</span>
       </label>
       <input
         id="event-location"
@@ -1820,7 +1550,7 @@ function EventForm({
         placeholder="Chez Camille"
       />
       <label htmlFor="event-description">
-        Un petit mot pour la tablée <span>Facultatif</span>
+        Description <span>Facultatif</span>
       </label>
       <textarea
         id="event-description"
@@ -1828,7 +1558,7 @@ function EventForm({
         onChange={(e) => setDescription(e.target.value)}
         maxLength={1000}
         rows={3}
-        placeholder="Une grande table, de bonnes choses et vous."
+        placeholder="Informations utiles pour le repas"
       />
       <button className="button primary full-width" disabled={busy}>
         {busy ? (
@@ -1836,7 +1566,7 @@ function EventForm({
         ) : (
           <Check size={17} />
         )}{" "}
-        {event ? "Enregistrer le repas" : "Créer le repas"}
+        {event ? "Enregistrer" : "Créer"}
       </button>
       {event && (
         <div className="form-admin-actions">
@@ -1947,21 +1677,14 @@ function ItemForm({
   };
   return (
     <form className="modal-form" onSubmit={submit}>
-      <p className="modal-intro">
-        {item
-          ? "Les apports déjà prévus sont conservés."
-          : admin
-            ? "Ajoutez un besoin précis ou un extra en libre."
-            : "Une idée, une envie ? Ajoutez-la sans objectif. L’organisateur pourra ensuite ajuster cet élément."}
-      </p>
-      <label htmlFor="item-name">Qu’est-ce qu’on apporte ?</label>
+      <label htmlFor="item-name">Nom</label>
       <input
         id="item-name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         required
         maxLength={100}
-        placeholder="Du pain, une salade, un appareil…"
+        placeholder="Pain, salade, appareil…"
       />
       <div className="form-columns">
         <div>
@@ -2000,14 +1723,7 @@ function ItemForm({
               checked={hasTarget}
               onChange={(e) => setHasTarget(e.target.checked)}
             />
-            <span>
-              Définir un objectif
-              <strong>
-                {hasTarget
-                  ? "Une quantité fixe pour ce repas"
-                  : "En libre, chacun apporte ce qu’il souhaite"}
-              </strong>
-            </span>
+            <span>Définir un objectif</span>
           </label>
           {hasTarget && (
             <div className="input-unit">
@@ -2039,7 +1755,7 @@ function ItemForm({
               step={unit === "place" || unit === "piece" ? 1 : "any"}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              placeholder="Je commence avec…"
+              placeholder="Quantité"
             />
             <span>{unit === "place" ? "appareil(s)" : unitLabels[unit]}</span>
           </div>
@@ -2081,7 +1797,7 @@ function ItemForm({
         ) : (
           <Check size={17} />
         )}
-        {item ? "Enregistrer les modifications" : "Ajouter à la liste"}
+        {item ? "Enregistrer" : "Ajouter"}
       </button>
       {item && (
         <button
@@ -2090,7 +1806,7 @@ function ItemForm({
           onClick={onDelete}
           disabled={busy}
         >
-          <Trash2 size={15} /> Supprimer cet élément et ses apports
+          <Trash2 size={15} /> Supprimer l’élément
         </button>
       )}
     </form>
@@ -2196,18 +1912,11 @@ function ContributionForm({
       }}
     >
       <div className="contribution-subject">
-        <span className="item-symbol">
-          {item.category === "equipment" ? (
-            <CookingPot size={22} />
-          ) : (
-            <Leaf size={22} />
-          )}
-        </span>
         <div>
           <strong>{item.name}</strong>
           <span>
             {item.target === null
-              ? "En libre, chaque apport est bienvenu"
+              ? "Sans objectif"
               : `Objectif : ${amount(item.target, item.unit)}`}
           </span>
         </div>
@@ -2220,7 +1929,7 @@ function ContributionForm({
         setPersonName={setPersonName}
       />
       <label htmlFor="contribution-quantity">
-        {item.unit === "place" ? "Nombre d’appareils" : "Quelle quantité ?"}
+        {item.unit === "place" ? "Nombre d’appareils" : "Quantité"}
       </label>
       <div className="input-unit">
         <input
@@ -2257,7 +1966,7 @@ function ContributionForm({
         </>
       )}
       <label htmlFor="contribution-note">
-        Une précision ? <span>Facultatif</span>
+        Note <span>Facultatif</span>
       </label>
       <textarea
         id="contribution-note"
@@ -2265,19 +1974,15 @@ function ContributionForm({
         onChange={(e) => setNote(e.target.value)}
         maxLength={300}
         rows={2}
-        placeholder="Sans alcool, fait maison, à partager…"
+        placeholder="Facultatif"
       />
-      <p className="field-hint">
-        <Users size={13} /> Vous pouvez aussi renseigner un apport pour
-        quelqu’un d’autre.
-      </p>
       <button className="button primary full-width" disabled={busy}>
         {busy ? (
           <LoaderCircle className="spin" size={17} />
         ) : (
           <Check size={17} />
         )}
-        {contribution ? "Enregistrer cet apport" : "Confirmer cet apport"}
+        {contribution ? "Enregistrer" : "Ajouter"}
       </button>
       {contribution && (
         <button
@@ -2286,7 +1991,7 @@ function ContributionForm({
           onClick={onDelete}
           disabled={busy}
         >
-          <Trash2 size={15} /> Retirer cet apport
+          <Trash2 size={15} /> Retirer l’apport
         </button>
       )}
     </form>
