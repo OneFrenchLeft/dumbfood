@@ -2,13 +2,11 @@ name: dumbfood
 
 services:
   app:
-    image: dumbfood:local
-    build:
-      context: .
+    image: ${DUMBFOOD_IMAGE:-ghcr.io/onefrenchleft/dumbfood:latest}
     init: true
     restart: unless-stopped
     ports:
-      - "${HOST_BIND:-0.0.0.0}:${PORT:-3000}:3000"
+      - "${HOST_BIND:-0.0.0.0}:${HOST_PORT:-2212}:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"

@@ -8,7 +8,7 @@ const contents = [
   `ADMIN_PASSWORD=${randomBytes(24).toString("base64url")}`,
   `SESSION_SECRET=${randomBytes(48).toString("base64url")}`,
   "",
-  "PORT=3000",
+  "HOST_PORT=2212",
   "HOST_BIND=0.0.0.0",
   "COOKIE_SECURE=false",
   "PUBLIC_URL=",
@@ -22,8 +22,8 @@ try {
   console.log(
     "Le mot de passe administrateur se trouve dans .env, champ ADMIN_PASSWORD.",
   );
-  console.log("Démarrage : docker compose up -d --build");
-  console.log("Administration : http://localhost:3000/admin");
+  console.log("Démarrage : docker compose up -d");
+  console.log("Administration : http://localhost:2212/admin");
 } catch (error) {
   if (error && error.code === "EEXIST") {
     console.error(".env existe déjà : aucune modification effectuée.");

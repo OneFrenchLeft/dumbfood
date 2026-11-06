@@ -1,15 +1,21 @@
-name: Checks
+name: Checks and Docker image
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,3 +26,96 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: docker build --tag dumbfood:ci .
+
+  publish-image:
+    name: Publish Docker image
+    needs: test-and-build
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image tags and labels
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=dumbfood
+            org.opencontainers.image.description=Shared meal planning with real-time collaboration
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Build and publish
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify published image with Compose on port 2212
+        env:
+          DUMBFOOD_IMAGE: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+          HOST_PORT: "2212"
+          HOST_BIND: "127.0.0.1"
+          COOKIE_SECURE: "false"
+          PUBLIC_URL: http://127.0.0.1:2212
+          DEMO_DATA: "false"
+        shell: bash
+        run: |
+          export ADMIN_PASSWORD="$(openssl rand -hex 24)"
+          export SESSION_SECRET="$(openssl rand -hex 48)"
+          trap 'docker compose -p dumbfood-ci down --volumes' EXIT
+          docker compose -p dumbfood-ci up -d --wait --wait-timeout 60
+          curl --fail --silent --show-error http://127.0.0.1:2212/api/health
+
+      - name: Summarize published image
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          {
+            echo "Published image: $IMAGE_NAME"
+            echo ""
+            echo "Digest: $IMAGE_DIGEST"
+            echo ""
+            echo "Verified with Docker Compose on port 2212 (linux/amd64)."
+            echo "Published platforms: linux/amd64 and linux/arm64."
+          } >> "$GITHUB_STEP_SUMMARY"

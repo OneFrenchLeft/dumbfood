@@ -22,10 +22,13 @@ Prérequis : Git, Docker Engine avec Docker Compose v2, et Node.js 24 pour gén�
 git clone https://github.com/OneFrenchLeft/dumbfood.git
 cd dumbfood
 node scripts/setup.mjs
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-Ouvrez **http://localhost:3000/admin**. Le script crée un `.env` privé contenant un mot de passe administrateur aléatoire dans `ADMIN_PASSWORD` et une clé de session dans `SESSION_SECRET`. Consultez ce fichier localement pour vous connecter ; il est exclu de Git et de l'image Docker. Le script refuse d'écraser une configuration existante.
+Compose est configuré pour télécharger **`ghcr.io/onefrenchleft/dumbfood:latest`**, sans compiler l'application sur votre machine. Le package doit avoir été publié par GitHub Actions et être accessible à votre compte ou au public.
+
+Ouvrez **http://localhost:2212/admin**. Le script crée un `.env` privé contenant un mot de passe administrateur aléatoire dans `ADMIN_PASSWORD` et une clé de session dans `SESSION_SECRET`. Consultez ce fichier localement pour vous connecter ; il est exclu de Git et de l'image Docker. Le script refuse d'écraser une configuration existante.
 
 Pour générer `.env` sans Node sur l'hôte, remplacez la commande `node scripts/setup.mjs` par :
 
@@ -35,7 +38,7 @@ docker run --rm --user "$(id -u):$(id -g)" \
   --workdir /app node:24-bookworm-slim node scripts/setup.mjs
 ```
 
-Créez ensuite un repas, ajoutez les ingrédients et le matériel, puis ouvrez **⋯ → Partager** pour envoyer son lien aux participants. Sur un téléphone du même réseau, utilisez l'adresse IP de l'hôte à la place de `localhost`, par exemple `http://192.168.1.20:3000`.
+Créez ensuite un repas, ajoutez les ingrédients et le matériel, puis ouvrez **⋯ → Partager** pour envoyer son lien aux participants. Sur un téléphone du même réseau, utilisez l'adresse IP de l'hôte à la place de `localhost`, par exemple `http://192.168.1.20:2212`.
 
 Le repas s’affiche comme une liste de courses : le **+** d’une ligne ajoute un apport ; toucher la ligne affiche les apports individuels et permet de les modifier. **Ajouter un élément**, en fin de liste, crée un nouvel ingrédient ou matériel. Le menu **⋯** donne accès au prénom, au partage, à l’historique et aux actions d’administration.
 
@@ -47,13 +50,16 @@ Modifiez `.env`, puis appliquez les changements avec `docker compose up -d`.
 | --- | --- | --- |
 | `ADMIN_PASSWORD` | Générée par le script | Mot de passe admin, au moins 12 caractères |
 | `SESSION_SECRET` | Générée par le script | Signature des sessions, au moins 32 caractères |
-| `PORT` | `3000` | Port publié sur l'hôte |
+| `HOST_PORT` | `2212` | Port publié par Docker sur l'hôte |
 | `HOST_BIND` | `0.0.0.0` | Interface d'écoute ; `127.0.0.1` derrière un proxy local |
+| `DUMBFOOD_IMAGE` | `ghcr.io/onefrenchleft/dumbfood:latest` | Image à utiliser ; peut être fixée à une version ou un tag SHA |
 | `COOKIE_SECURE` | `false` | `true` lorsque l'accès se fait en HTTPS |
 | `PUBLIC_URL` | Vide | Origine publique exacte derrière un reverse proxy, par exemple `https://repas.example.org` |
 | `DEMO_DATA` | `false` | Jeu d'exemple, uniquement sur une base neuve |
 
-Le conteneur écoute toujours sur son port interne `3000`. La base est enregistrée dans `/app/data/dumbfood.sqlite`, sur le volume nommé `dumbfood_dumbfood-data`.
+Le conteneur écoute toujours sur son port interne `3000`. `HOST_PORT` concerne uniquement le port publié par Docker. La base est enregistrée dans `/app/data/dumbfood.sqlite`, sur le volume nommé `dumbfood_dumbfood-data`.
+
+Pour une installation créée avec une ancienne version de `.env`, définissez `HOST_PORT` si vous souhaitez conserver un port Docker personnalisé : la variable `PORT` ne choisit plus le port publié. Sans `HOST_PORT`, le port publié est désormais `2212`. Le volume de données conserve son nom.
 
 Pour une adresse publique, placez l'application derrière un reverse proxy HTTPS, activez `COOKIE_SECURE=true` et définissez `PUBLIC_URL` avec son origine exacte, par exemple `https://repas.example.org`. Le proxy doit transmettre l'en-tête `Host` et les connexions WebSocket vers `/ws`. Le lien du repas donne accès à ses données : partagez-le avec les personnes invitées.
 
@@ -62,7 +68,7 @@ Pour une adresse publique, placez l'application derrière un reverse proxy HTTPS
 ```sh
 docker compose ps
 docker compose logs --tail=100 app
-curl http://localhost:3000/api/health
+curl http://localhost:2212/api/health
 docker compose down
 ```
 
@@ -97,8 +103,23 @@ Si vous changez le nom du projet Compose, adaptez le nom du volume dans ces comm
 
 ```sh
 git pull --ff-only
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+### Construire l'image localement
+
+Le fichier d'override active la construction depuis les sources et utilise l'image locale `dumbfood:local` :
+
+```sh
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
+
+### Publication de l'image sur GitHub
+
+Le workflow GitHub Actions exécute les tests, compile l'application, puis publie l'image sur GitHub Container Registry lors d'un push sur `main`, d'un tag `v*` ou d'un lancement manuel. Les images ciblent Linux `amd64` et `arm64`. Sur `main`, le tag `latest` suit la dernière publication ; chaque publication reçoit aussi un tag `sha-<commit-court>`. Un tag Git `v1.2.3` produit les tags d'image `1.2.3` et `1.2`. Définissez `DUMBFOOD_IMAGE` pour fixer une version précise.
+
+Lors de sa première publication, un nouveau package GHCR est privé par défaut. Pour autoriser les téléchargements sans connexion, le propriétaire doit ouvrir les paramètres du package `dumbfood`, puis **Package settings → Change visibility → Public**. Si le package reste privé, connectez Docker avec un jeton GitHub ayant le droit `read:packages` avant `docker compose pull`.
 
 ## Développement
 
@@ -116,7 +137,7 @@ Dans un deuxième terminal :
 npm run dev:ui
 ```
 
-Ouvrez l'URL Vite affichée, généralement `http://localhost:5173`. Vite relaie l'API et les WebSockets vers le serveur sur `3000`. Hors Docker, `DB_PATH` permet de choisir le fichier SQLite.
+Ouvrez l'URL Vite affichée, généralement `http://localhost:5173`. Vite relaie l'API et les WebSockets vers le serveur sur `3000`. Hors Docker, le serveur conserve son port par défaut `3000` ; `HOST_PORT` n'a pas d'effet. `PORT` permet de changer ce port serveur, et `DB_PATH` de choisir le fichier SQLite.
 
 ```sh
 npm test
@@ -146,5 +167,5 @@ Le Dockerfile accepte un secret BuildKit facultatif `proxy_ca`. La CA reste dans
 
 ```sh
 docker build --secret id=proxy_ca,src=/chemin/vers/ca.pem -t dumbfood:local .
-docker compose up -d --no-build
+docker compose -f compose.yaml -f compose.build.yaml up -d --no-build
 ```
